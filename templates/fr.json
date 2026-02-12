@@ -1,0 +1,22 @@
+{
+    "subject": [
+        "fr"
+    ],
+    "text": [
+        "[warmup_mailto template=\\\"fr\\\" class=\\\"btn\\\"][\/warmup_mailto]"
+    ],
+    "html": [
+        "[warmup_mailto template=\"fr\" class=\"btn\"][\/warmup_mailto]"
+    ],
+    "from_name": [
+        "fr"
+    ],
+    "mailto_subject": [
+        "fr"
+    ],
+    "mailto_body": [
+        "fr"
+    ],
+    "mailto_from_name": [],
+    "default_label": "fr"
+}

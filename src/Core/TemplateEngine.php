@@ -48,11 +48,16 @@ class TemplateEngine {
 
 		// 5. Prepare Variables
 		$vars = [
-			'email'  => $to,
-			'domain' => $domain,
-			'local'  => $prefix,
-			'date'   => current_time( 'd/m/Y' ),
-			'time'   => current_time( 'H:i' ),
+			'email'        => $to,
+			'domain'       => $domain,
+			'local'        => $prefix,
+			'date'         => current_time( 'd/m/Y' ),
+			'time'         => current_time( 'H:i' ),
+			// Natural Variables
+			'prénom'       => mb_convert_case( explode( '.', $prefix )[0], MB_CASE_TITLE, 'UTF-8' ),
+			'heure_fr'     => current_time( 'H\hi' ),
+			'jour_semaine' => date_i18n( 'l' ),
+			'mois'         => date_i18n( 'F' ),
 		];
 
 		// 6. Apply Placeholders

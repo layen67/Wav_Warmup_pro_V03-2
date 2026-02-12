@@ -149,6 +149,10 @@ class Mailto {
 			'{{date}}'       => current_time( 'd/m/Y' ),
 			'{{time}}'       => current_time( 'H:i' ),
 			'{{year}}'       => current_time( 'Y' ),
+			// Natural Variables
+			'{{heure_fr}}'     => current_time( 'H\hi' ),
+			'{{jour_semaine}}' => date_i18n( 'l' ),
+			'{{mois}}'         => date_i18n( 'F' ),
 		];
 
 		if ( is_user_logged_in() ) {
@@ -157,11 +161,13 @@ class Mailto {
 			$variables['{{user_email}}'] = $user->user_email;
 			$variables['{{user_firstname}}'] = $user->first_name;
 			$variables['{{user_lastname}}'] = $user->last_name;
+			$variables['{{prénom}}'] = $user->first_name; // Alias
 		} else {
 			$variables['{{user_name}}'] = '';
 			$variables['{{user_email}}'] = '';
 			$variables['{{user_firstname}}'] = '';
 			$variables['{{user_lastname}}'] = '';
+			$variables['{{prénom}}'] = '';
 		}
 
 		return str_replace( array_keys( $variables ), array_values( $variables ), $text );

@@ -6,6 +6,7 @@ use PostalWarmup\Models\Database;
 use PostalWarmup\Services\TemplateLoader;
 use PostalWarmup\Services\LoadBalancer;
 use PostalWarmup\Services\ISPDetector;
+use PostalWarmup\Core\TemplateEngine;
 
 class Mailto {
 
@@ -91,6 +92,10 @@ class Mailto {
 		$email_to = ! empty( $atts['email'] ) ? $atts['email'] : $email_prefix . '@' . $server['domain'];
 		$subject = ! empty( $atts['subject'] ) ? $atts['subject'] : TemplateLoader::pick_random( $template_data['mailto_subject'] ?? $template_data['subject'] );
 		$body = ! empty( $atts['body'] ) ? $atts['body'] : TemplateLoader::pick_random( $template_data['mailto_body'] ?? $template_data['text'] );
+
+		// Process Spintax
+		$subject = TemplateEngine::process_spintax( $subject );
+		$body = TemplateEngine::process_spintax( $body );
 
 		// Process variables
 		$subject = $this->process_variables( $subject );

@@ -46,6 +46,12 @@ class TemplateEngine {
 		$html      = self::maybe_decode( $html );
 		$from_name = self::maybe_decode( $from_name );
 
+		// 4b. Process Spintax
+		$subject   = self::process_spintax( $subject );
+		$text      = self::process_spintax( $text );
+		$html      = self::process_spintax( $html );
+		$from_name = self::process_spintax( $from_name );
+
 		// 5. Prepare Variables
 		$vars = [
 			'email'        => $to,
@@ -119,6 +125,22 @@ class TemplateEngine {
 		foreach ( $vars as $key => $value ) {
 			$text = str_replace( "{{{$key}}}", $value, $text );
 		}
+		return $text;
+	}
+
+	public static function process_spintax( $text ) {
+		if ( ! is_string( $text ) || empty( $text ) ) return $text;
+
+		// Iteratively replace innermost spintax patterns until none remain
+		// Pattern matches {option1|option2|...}
+		// NOTE: Regex requires at least one '|' to differentiate from {{variables}}
+		while ( preg_match( '/\{([^{}]*\|[^{}]*)\}/', $text ) ) {
+			$text = preg_replace_callback( '/\{([^{}]*\|[^{}]*)\}/', function( $matches ) {
+				$options = explode( '|', $matches[1] );
+				return $options[ array_rand( $options ) ];
+			}, $text );
+		}
+
 		return $text;
 	}
 }

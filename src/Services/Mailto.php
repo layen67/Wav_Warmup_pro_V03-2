@@ -18,7 +18,7 @@ class Mailto {
 	}
 
 	public function enqueue_scripts() {
-		wp_enqueue_script( 'pw-mailto', PW_PLUGIN_URL . 'admin/assets/js/mailto-tracker.js', array( 'jquery' ), PW_VERSION, true );
+		wp_enqueue_script( 'pw-mailto', PW_PLUGIN_URL . 'public/js/mailto-tracker.js', array( 'jquery' ), PW_VERSION, true );
 		wp_localize_script( 'pw-mailto', 'pwMailto', array(
 			'ajaxurl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'pw_mailto_click' )
@@ -283,5 +283,46 @@ class Mailto {
 		elseif ( isset( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
 		elseif ( isset( $_SERVER['REMOTE_ADDR'] ) ) $ip = $_SERVER['REMOTE_ADDR'];
 		return sanitize_text_field( $ip );
+	}
+
+	public static function get_clicks_by_template( $days = 30 ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_mailto_clicks';
+		return $wpdb->get_results( $wpdb->prepare(
+			"SELECT template, COUNT(*) as total_clicks, COUNT(DISTINCT page_url) as pages_used, MAX(clicked_at) as last_click
+			FROM $table
+			WHERE clicked_at >= DATE_SUB(NOW(), INTERVAL %d DAY)
+			GROUP BY template
+			ORDER BY total_clicks DESC",
+			$days
+		), ARRAY_A );
+	}
+
+	public static function get_clicks_by_page( $days = 30, $limit = 10 ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_mailto_clicks';
+		return $wpdb->get_results( $wpdb->prepare(
+			"SELECT page_url, COUNT(*) as clicks
+			FROM $table
+			WHERE clicked_at >= DATE_SUB(NOW(), INTERVAL %d DAY)
+			GROUP BY page_url
+			ORDER BY clicks DESC
+			LIMIT %d",
+			$days,
+			$limit
+		), ARRAY_A );
+	}
+
+	public static function get_click_stats( $days = 30 ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_mailto_clicks';
+		return $wpdb->get_results( $wpdb->prepare(
+			"SELECT DATE(clicked_at) as click_date, COUNT(*) as clicks
+			FROM $table
+			WHERE clicked_at >= DATE_SUB(NOW(), INTERVAL %d DAY)
+			GROUP BY click_date
+			ORDER BY click_date ASC",
+			$days
+		), ARRAY_A );
 	}
 }

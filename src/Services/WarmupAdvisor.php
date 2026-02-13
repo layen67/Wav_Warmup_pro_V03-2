@@ -13,6 +13,10 @@ use PostalWarmup\Admin\ISPManager;
  */
 class WarmupAdvisor {
 
+	public static function init() {
+		add_action( 'pw_advisor_recommendation', [ __CLASS__, 'handle_recommendation' ], 10, 2 );
+	}
+
 	/**
 	 * Exécute l'analyse et déclenche les recommandations
 	 */
@@ -80,6 +84,52 @@ class WarmupAdvisor {
 					'timestamp' => current_time('mysql')
 				] );
 			}
+		}
+	}
+
+	/**
+	 * Gère les recommandations émises par l'Advisor
+	 */
+	public static function handle_recommendation( $server_id, $data ) {
+		$action = $data['action'] ?? '';
+		$reason = $data['reason'] ?? '';
+		$isp    = $data['isp'] ?? 'General';
+
+		$server = Database::get_server( $server_id );
+		if ( ! $server ) return;
+
+		// 1. Envoyer une alerte (si activé)
+		if ( get_option( 'pw_notify_on_error', true ) ) {
+			$to = get_option( 'pw_notification_email', get_option( 'admin_email' ) );
+			$subject = "[Warmup Alert] Action requise pour {$server['domain']}";
+			$message = "L'Advisor a détecté un problème sur le serveur {$server['domain']} (ISP: $isp).\n\n";
+			$message .= "Raison : $reason\n";
+			$message .= "Action recommandée : $action\n\n";
+			$message .= "Connectez-vous pour vérifier : " . admin_url( 'admin.php?page=postal-warmup' );
+
+			wp_mail( $to, $subject, $message );
+		}
+
+		// 2. Appliquer l'action
+		switch ( $action ) {
+			case 'stop_immediate':
+			case 'pause_24h':
+				Logger::critical( "Advisor: Mise en pause automatique de {$server['domain']}", [ 'reason' => $reason ] );
+				// Désactiver le serveur
+				global $wpdb;
+				$table = $wpdb->prefix . 'postal_servers';
+				$wpdb->update( $table, [ 'active' => 0 ], [ 'id' => $server_id ] );
+				break;
+
+			case 'reduce_growth':
+				Logger::warning( "Advisor: Réduction de croissance pour {$server['domain']}", [ 'reason' => $reason ] );
+				// Reculer le jour de warmup de 1 ou 2 jours pour ralentir
+				global $wpdb;
+				$table = $wpdb->prefix . 'postal_servers';
+				$current_day = (int) $server['warmup_day'];
+				$new_day = max( 1, $current_day - 2 );
+				$wpdb->update( $table, [ 'warmup_day' => $new_day ], [ 'id' => $server_id ] );
+				break;
 		}
 	}
 }

@@ -76,6 +76,9 @@ class Plugin {
 		// Initialize Mailto Shortcodes & Tracking
 		$mailto = new \PostalWarmup\Services\Mailto();
 		$mailto->init();
+
+		// Initialize Advisor Listeners
+		\PostalWarmup\Services\WarmupAdvisor::init();
 	}
 
 	/**

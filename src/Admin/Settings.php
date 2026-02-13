@@ -171,8 +171,12 @@ class Settings {
 
 	public function webhook_url_field() {
 		$value = get_option( 'pw_webhook_url', '' );
-		echo '<input type="url" name="pw_webhook_url" value="' . esc_attr( $value ) . '" class="regular-text" placeholder="https://exemple.com/webhook">';
+		echo '<div style="display:flex; align-items:center;">';
+		echo '<input type="url" name="pw_webhook_url" id="pw_webhook_url" value="' . esc_attr( $value ) . '" class="regular-text" placeholder="https://exemple.com/webhook">';
+		echo '<button type="button" class="button" id="pw-test-webhook-btn" style="margin-left:10px;">' . __( 'Tester l\'URL', 'postal-warmup' ) . '</button>';
+		echo '</div>';
 		echo '<p class="description">' . __( 'L\'URL qui recevra les requêtes POST avec un payload JSON.', 'postal-warmup' ) . '</p>';
+		echo '<div id="pw-webhook-test-result" style="margin-top:5px; font-weight:bold;"></div>';
 	}
 
 	public function webhook_events_field() {

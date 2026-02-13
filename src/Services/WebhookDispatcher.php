@@ -91,4 +91,30 @@ class WebhookDispatcher {
 			Logger::error( "Webhook: Error sending $event_name", [ 'error' => $response->get_error_message() ] );
 		}
 	}
+
+	public static function send_test( $url ) {
+		if ( empty( $url ) ) return new \WP_Error( 'invalid_url', 'URL manquante' );
+
+		$body = [
+			'event' => 'TestEvent',
+			'timestamp' => time(),
+			'payload' => [
+				'message' => 'Ceci est un test de connexion depuis Postal Warmup Pro.',
+				'server_url' => get_site_url()
+			]
+		];
+
+		$response = wp_remote_post( $url, [
+			'body' => json_encode( $body ),
+			'headers' => [
+				'Content-Type' => 'application/json',
+				'X-Postal-Warmup-Event' => 'TestEvent',
+				'User-Agent' => 'PostalWarmupPro/' . ( defined('PW_VERSION') ? PW_VERSION : '1.0' )
+			],
+			'timeout' => 10,
+			'sslverify' => apply_filters( 'https_local_ssl_verify', false )
+		] );
+
+		return $response;
+	}
 }

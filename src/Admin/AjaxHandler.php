@@ -452,6 +452,30 @@ class AjaxHandler {
 		wp_send_json_success();
 	}
 
+	public function ajax_test_webhook() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$url = isset( $_POST['url'] ) ? esc_url_raw( $_POST['url'] ) : '';
+
+		if ( empty( $url ) ) wp_send_json_error( [ 'message' => 'Veuillez saisir une URL valide.' ] );
+
+		$result = \PostalWarmup\Services\WebhookDispatcher::send_test( $url );
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( [ 'message' => 'Erreur : ' . $result->get_error_message() ] );
+		}
+
+		$code = wp_remote_retrieve_response_code( $result );
+		$body = wp_remote_retrieve_body( $result );
+
+		if ( $code >= 200 && $code < 300 ) {
+			wp_send_json_success( [ 'message' => "Succès ! Le serveur a répondu HTTP $code." ] );
+		} else {
+			wp_send_json_error( [ 'message' => "Échec : Le serveur a répondu HTTP $code. ($body)" ] );
+		}
+	}
+
 	public function ajax_render_preview() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );

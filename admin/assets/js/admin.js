@@ -150,6 +150,42 @@
                 .always(() => $btn.prop('disabled', false).text(oldText));
         });
 
+        // --- WEBHOOK TEST ---
+        $(document).on('click', '#pw-test-webhook-btn', function(e) {
+            e.preventDefault();
+            const $btn = $(this);
+            const url = $('#pw_webhook_url').val();
+            const $res = $('#pw-webhook-test-result');
+
+            if (!url) {
+                alert('Veuillez entrer une URL.');
+                return;
+            }
+
+            const oldText = $btn.text();
+            $btn.prop('disabled', true).text('Test en cours...');
+            $res.html('');
+
+            $.post(pwAdmin.ajaxurl, {
+                action: 'pw_test_webhook',
+                nonce: pwAdmin.nonce,
+                url: url
+            })
+            .done(function(res) {
+                if (res.success) {
+                    $res.html('<span style="color:#46b450; font-weight:bold;">' + res.data.message + '</span>');
+                } else {
+                    $res.html('<span style="color:#dc3232; font-weight:bold;">' + res.data.message + '</span>');
+                }
+            })
+            .fail(function() {
+                $res.html('<span style="color:#dc3232;">Erreur réseau lors du test.</span>');
+            })
+            .always(function() {
+                $btn.prop('disabled', false).text(oldText);
+            });
+        });
+
         // --- DASHBOARD REALTIME ---
         let activityChart = null;
 

@@ -181,6 +181,9 @@ class QueueManager {
                     'day' => $server['lb_metrics']['warmup_day'] ?? '?'
                 ]);
 
+                // Hook: Item Sent (Audit Req)
+                do_action( 'pw_queue_item_sent', $id, $item, $server );
+
             } else {
                 $wpdb->update( $table, [ 
                     'status' => 'failed', 

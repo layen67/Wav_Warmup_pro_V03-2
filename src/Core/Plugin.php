@@ -125,6 +125,12 @@ class Plugin {
 			wp_schedule_event( time(), 'daily', 'pw_cleanup_queue' );
 		}
 
+		// Advisor Check (Hourly)
+		$this->loader->add_action( 'pw_advisor_check', 'PostalWarmup\Services\WarmupAdvisor', 'run' );
+		if ( ! wp_next_scheduled( 'pw_advisor_check' ) ) {
+			wp_schedule_event( time(), 'hourly', 'pw_advisor_check' );
+		}
+
 		// Self-healing: Ensure daily report is scheduled if missing (Fix for existing installations)
 		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
 			wp_schedule_event( time(), 'daily', 'pw_daily_report' );

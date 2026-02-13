@@ -235,16 +235,30 @@ class Stats {
 		// Logic to return chart data for dashboard
 		global $wpdb;
 		$stats_table = $wpdb->prefix . 'postal_stats';
+		$daily_table = $wpdb->prefix . 'postal_stats_daily';
 		$date_limit = date( 'Y-m-d', strtotime( '-7 days' ) );
+		$today = current_time( 'Y-m-d' );
 		
-		$results = $wpdb->get_results( $wpdb->prepare(
-			"SELECT date, SUM(sent_count) as total_sent, SUM(success_count) as total_success, SUM(error_count) as total_errors
-			FROM $stats_table 
-			WHERE date >= %s 
-			GROUP BY date 
-			ORDER BY date ASC",
-			$date_limit
-		), ARRAY_A );
+		// Optimization: Use aggregated daily stats for past days + current stats for today
+		// 1. Past days (from daily table)
+		$sql_past = "
+			SELECT date, SUM(total_sent) as total_sent, SUM(total_success) as total_success, SUM(total_error) as total_errors
+			FROM $daily_table
+			WHERE date >= %s AND date < %s
+			GROUP BY date
+		";
+
+		// 2. Today (from stats table)
+		$sql_today = "
+			SELECT date, SUM(sent_count) as total_sent, SUM(success_count) as total_success, SUM(error_count) as total_errors
+			FROM $stats_table
+			WHERE date = %s
+			GROUP BY date
+		";
+
+		$sql = "($sql_past) UNION ALL ($sql_today) ORDER BY date ASC";
+
+		$results = $wpdb->get_results( $wpdb->prepare( $sql, $date_limit, $today, $today ), ARRAY_A );
 		
 		return [
 			'labels' => array_column( $results, 'date' ),

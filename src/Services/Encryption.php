@@ -54,8 +54,11 @@ class Encryption {
 
 		$encrypted = openssl_encrypt( $data, self::METHOD, $key, 0, $iv );
 
-		// On retourne l'IV et le texte chiffré, encodés en base64 pour le stockage
-		return base64_encode( $iv . $encrypted );
+		// HMAC pour intégrité (Encrypt-then-MAC)
+		$hmac = hash_hmac( 'sha256', $iv . $encrypted, $key, true );
+
+		// On retourne l'IV, le texte chiffré et le HMAC, encodés en base64
+		return base64_encode( $iv . $hmac . $encrypted );
 	}
 
 	/**
@@ -78,11 +81,35 @@ class Encryption {
 
 		$key = hash( 'sha256', self::get_key() );
 		$iv_length = openssl_cipher_iv_length( self::METHOD );
+		$hmac_length = 32; // sha256 output length
 
 		// Vérifier que la longueur est suffisante pour contenir l'IV
 		if ( strlen( $raw ) < $iv_length ) {
 			return $data;
 		}
+
+		// Détection format: Avec HMAC ou Sans HMAC (Legacy)
+		// Format V2: IV (16) + HMAC (32) + Ciphertext
+		// Format V1: IV (16) + Ciphertext
+
+		// Essai de déchiffrement V2 (avec HMAC)
+		if ( strlen( $raw ) >= $iv_length + $hmac_length ) {
+			$iv = substr( $raw, 0, $iv_length );
+			$hmac = substr( $raw, $iv_length, $hmac_length );
+			$ciphertext = substr( $raw, $iv_length + $hmac_length );
+
+			// Vérification HMAC
+			$calced_hmac = hash_hmac( 'sha256', $iv . $ciphertext, $key, true );
+
+			if ( hash_equals( $hmac, $calced_hmac ) ) {
+				$decrypted = openssl_decrypt( $ciphertext, self::METHOD, $key, 0, $iv );
+				if ( $decrypted !== false ) {
+					return $decrypted;
+				}
+			}
+		}
+
+		// Fallback V1 (Sans HMAC) ou si V2 a échoué (ex: HMAC invalide car c'était du V1)
 
 		$iv = substr( $raw, 0, $iv_length );
 		$ciphertext = substr( $raw, $iv_length );

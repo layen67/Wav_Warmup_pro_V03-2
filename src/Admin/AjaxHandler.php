@@ -290,7 +290,20 @@ class AjaxHandler {
 		$content = file_get_contents( $file['tmp_name'] );
 		$data = json_decode( $content, true );
 		
-		if ( ! $data || ! isset( $data['subject'] ) ) wp_send_json_error( [ 'message' => 'Invalid JSON' ] );
+		if ( ! $data ) wp_send_json_error( [ 'message' => 'Invalid JSON' ] );
+
+		// Validation stricte de la structure
+		$required = [ 'subject', 'text', 'html' ]; // Basic requirements
+		foreach ( $required as $field ) {
+			if ( ! isset( $data[ $field ] ) ) {
+				wp_send_json_error( [ 'message' => "Missing field: $field" ] );
+			}
+		}
+
+		// Validation des types (Doit être array pour les variants)
+		if ( ! is_array( $data['subject'] ) || ! is_array( $data['text'] ) || ! is_array( $data['html'] ) ) {
+			wp_send_json_error( [ 'message' => 'Invalid format: fields must be arrays' ] );
+		}
 		
 		$name = sanitize_title( pathinfo( $file['name'], PATHINFO_FILENAME ) );
 		$uncat = TemplateManager::ensure_uncategorized_folder();

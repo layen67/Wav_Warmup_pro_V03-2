@@ -339,6 +339,12 @@ class Activator {
 			UNIQUE KEY name (name)
 		) $charset_collate;";
 		dbDelta( $sql_strategies );
+
+		// Ajouter la capability 'manage_postal_warmup' aux admins
+		$role = get_role( 'administrator' );
+		if ( $role ) {
+			$role->add_cap( 'manage_postal_warmup' );
+		}
 	}
 
 	private static function set_default_options() {

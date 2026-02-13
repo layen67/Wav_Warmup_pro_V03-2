@@ -21,25 +21,28 @@ class Admin {
 	}
 
 	public function add_admin_menu() {
+		$menu_name = get_option( 'pw_wl_menu_name', __( 'Postal Warmup', 'postal-warmup' ) );
+		$icon = get_option( 'pw_wl_menu_icon', 'dashicons-email-alt' );
+
 		add_menu_page(
-			__( 'Postal Warmup', 'postal-warmup' ),
-			__( 'Postal Warmup', 'postal-warmup' ),
-			'manage_options',
+			$menu_name,
+			$menu_name,
+			'manage_postal_warmup',
 			'postal-warmup',
 			[ $this, 'display_dashboard' ],
-			'dashicons-email-alt',
+			$icon,
 			26
 		);
-		add_submenu_page( 'postal-warmup', __( 'Tableau de bord', 'postal-warmup' ), __( 'Tableau de bord', 'postal-warmup' ), 'manage_options', 'postal-warmup', [ $this, 'display_dashboard' ] );
-		add_submenu_page( 'postal-warmup', __( 'Serveurs', 'postal-warmup' ), __( 'Serveurs', 'postal-warmup' ), 'manage_options', 'postal-warmup-servers', [ $this, 'display_servers' ] );
-		add_submenu_page( 'postal-warmup', __( 'File d\'attente', 'postal-warmup' ), __( 'File d\'attente', 'postal-warmup' ), 'manage_options', 'postal-warmup-queue', [ $this, 'display_queue' ] );
-		add_submenu_page( 'postal-warmup', __( 'Templates', 'postal-warmup' ), __( 'Templates', 'postal-warmup' ), 'manage_options', 'postal-warmup-templates', [ $this, 'display_templates' ] );
-		add_submenu_page( 'postal-warmup', __( 'Statistiques', 'postal-warmup' ), __( 'Statistiques', 'postal-warmup' ), 'manage_options', 'postal-warmup-stats', [ $this, 'display_stats' ] );
-		add_submenu_page( 'postal-warmup', __( 'Stats Mailto', 'postal-warmup' ), __( 'Stats Mailto', 'postal-warmup' ), 'manage_options', 'postal-warmup-mailto-stats', [ $this, 'display_mailto_stats' ] );
-		add_submenu_page( 'postal-warmup', __( 'Logs', 'postal-warmup' ), __( 'Logs', 'postal-warmup' ), 'manage_options', 'postal-warmup-logs', [ $this, 'display_logs' ] );
-		add_submenu_page( 'postal-warmup', __( 'Paramètres', 'postal-warmup' ), __( 'Paramètres', 'postal-warmup' ), 'manage_options', 'postal-warmup-settings', [ $this, 'display_settings' ] );
-		add_submenu_page( 'postal-warmup', __( 'Gestion ISP', 'postal-warmup' ), __( 'Gestion ISP', 'postal-warmup' ), 'manage_options', 'postal-warmup-isps', [ $this, 'display_isps' ] );
-		add_submenu_page( 'postal-warmup', __( 'Stratégies', 'postal-warmup' ), __( 'Stratégies', 'postal-warmup' ), 'manage_options', 'postal-warmup-strategies', [ $this, 'display_strategies' ] );
+		add_submenu_page( 'postal-warmup', __( 'Tableau de bord', 'postal-warmup' ), __( 'Tableau de bord', 'postal-warmup' ), 'manage_postal_warmup', 'postal-warmup', [ $this, 'display_dashboard' ] );
+		add_submenu_page( 'postal-warmup', __( 'Serveurs', 'postal-warmup' ), __( 'Serveurs', 'postal-warmup' ), 'manage_postal_warmup', 'postal-warmup-servers', [ $this, 'display_servers' ] );
+		add_submenu_page( 'postal-warmup', __( 'File d\'attente', 'postal-warmup' ), __( 'File d\'attente', 'postal-warmup' ), 'manage_postal_warmup', 'postal-warmup-queue', [ $this, 'display_queue' ] );
+		add_submenu_page( 'postal-warmup', __( 'Templates', 'postal-warmup' ), __( 'Templates', 'postal-warmup' ), 'manage_postal_warmup', 'postal-warmup-templates', [ $this, 'display_templates' ] );
+		add_submenu_page( 'postal-warmup', __( 'Statistiques', 'postal-warmup' ), __( 'Statistiques', 'postal-warmup' ), 'manage_postal_warmup', 'postal-warmup-stats', [ $this, 'display_stats' ] );
+		add_submenu_page( 'postal-warmup', __( 'Stats Mailto', 'postal-warmup' ), __( 'Stats Mailto', 'postal-warmup' ), 'manage_postal_warmup', 'postal-warmup-mailto-stats', [ $this, 'display_mailto_stats' ] );
+		add_submenu_page( 'postal-warmup', __( 'Logs', 'postal-warmup' ), __( 'Logs', 'postal-warmup' ), 'manage_postal_warmup', 'postal-warmup-logs', [ $this, 'display_logs' ] );
+		add_submenu_page( 'postal-warmup', __( 'Paramètres', 'postal-warmup' ), __( 'Paramètres', 'postal-warmup' ), 'manage_postal_warmup', 'postal-warmup-settings', [ $this, 'display_settings' ] );
+		add_submenu_page( 'postal-warmup', __( 'Gestion ISP', 'postal-warmup' ), __( 'Gestion ISP', 'postal-warmup' ), 'manage_postal_warmup', 'postal-warmup-isps', [ $this, 'display_isps' ] );
+		add_submenu_page( 'postal-warmup', __( 'Stratégies', 'postal-warmup' ), __( 'Stratégies', 'postal-warmup' ), 'manage_postal_warmup', 'postal-warmup-strategies', [ $this, 'display_strategies' ] );
 	}
 
 	public function enqueue_styles( $hook ) {
@@ -51,6 +54,18 @@ class Admin {
 		wp_enqueue_style( 'pw-admin', PW_PLUGIN_URL . 'admin/assets/css/admin.css', [], $script_version );
 		if ( strpos( $hook, 'postal-warmup-templates' ) !== false || $hook === 'toplevel_page_postal-warmup' ) {
 			wp_enqueue_style( 'pw-templates', PW_PLUGIN_URL . 'admin/assets/css/templates.css', [ 'pw-admin' ], $script_version );
+		}
+
+		// White Label Custom CSS
+		$custom_css = get_option( 'pw_wl_custom_css' );
+		if ( ! empty( $custom_css ) ) {
+			wp_add_inline_style( 'pw-admin', strip_tags( $custom_css ) );
+		}
+
+		// Hide Footer Text if White Label enabled
+		if ( get_option( 'pw_wl_hide_footer', false ) ) {
+			add_filter( 'admin_footer_text', '__return_empty_string', 999 );
+			add_filter( 'update_footer', '__return_empty_string', 999 );
 		}
 	}
 

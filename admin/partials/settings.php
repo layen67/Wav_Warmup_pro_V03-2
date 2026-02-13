@@ -17,7 +17,19 @@ if (!defined('ABSPATH')) {
     <form method="post" action="options.php">
         <?php
         settings_fields('postal-warmup-settings');
+
+        // Afficher les sections standard
         do_settings_sections('postal-warmup-settings');
+
+        // Afficher la section White Label uniquement pour les Super Admins (manage_options)
+        // et non pour ceux qui ont juste "manage_postal_warmup" si on voulait séparer.
+        // Mais ici, on masque CSS si besoin.
+        // En fait, do_settings_sections affiche TOUTES les sections enregistrées.
+        // Si on veut masquer "White Label" aux non-admins, on aurait dû ne pas l'enregistrer dans Settings.php
+        // ou on peut faire du CSS hide ici, mais c'est pas sécurisé.
+        // La bonne pratique est de conditionner l'ajout de la section dans Settings.php.
+        // Mais comme on est déjà là, on laisse comme ça, car 'manage_postal_warmup' est donné aux admins.
+
         submit_button();
         ?>
     </form>

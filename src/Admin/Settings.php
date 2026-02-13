@@ -96,6 +96,21 @@ class Settings {
 
 		register_setting( 'postal-warmup-settings', 'pw_reputation_drop_sensitivity', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 20 ) );
 		add_settings_field( 'pw_reputation_drop_sensitivity', __( 'Sensibilité de Chute (%)', 'postal-warmup' ), array( $this, 'reputation_drop_sensitivity_field' ), 'postal-warmup-settings', 'pw_safety_section' );
+
+		// === Section White Label (Marque Blanche) ===
+		add_settings_section( 'pw_whitelabel_section', __( 'Marque Blanche', 'postal-warmup' ), array( $this, 'whitelabel_section_callback' ), 'postal-warmup-settings' );
+
+		register_setting( 'postal-warmup-settings', 'pw_wl_menu_name', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => 'Postal Warmup' ) );
+		add_settings_field( 'pw_wl_menu_name', __( 'Nom du Menu', 'postal-warmup' ), array( $this, 'wl_menu_name_field' ), 'postal-warmup-settings', 'pw_whitelabel_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_wl_menu_icon', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_html_class', 'default' => 'dashicons-email-alt' ) );
+		add_settings_field( 'pw_wl_menu_icon', __( 'Icône Dashicon', 'postal-warmup' ), array( $this, 'wl_menu_icon_field' ), 'postal-warmup-settings', 'pw_whitelabel_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_wl_hide_footer', array( 'type' => 'boolean', 'default' => false ) );
+		add_settings_field( 'pw_wl_hide_footer', __( 'Masquer le texte "Postal Warmup" du footer', 'postal-warmup' ), array( $this, 'wl_hide_footer_field' ), 'postal-warmup-settings', 'pw_whitelabel_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_wl_custom_css', array( 'type' => 'string', 'sanitize_callback' => 'wp_strip_all_tags', 'default' => '' ) ); // Basic sanitization, allow some CSS
+		add_settings_field( 'pw_wl_custom_css', __( 'CSS Personnalisé (Admin)', 'postal-warmup' ), array( $this, 'wl_custom_css_field' ), 'postal-warmup-settings', 'pw_whitelabel_section' );
 	}
 
 	public function general_section_callback() { echo '<p>' . __( 'Configuration générale des envois.', 'postal-warmup' ) . '</p>'; }
@@ -277,5 +292,31 @@ class Settings {
 		$value = get_option( 'pw_reputation_drop_sensitivity', 20 );
 		echo '<input type="number" name="pw_reputation_drop_sensitivity" value="' . esc_attr( $value ) . '" class="small-text" min="1" max="100"> ' . __( '% de baisse', 'postal-warmup' );
 		echo '<p class="description">' . __( 'Déclenche une alerte si le taux d\'ouverture chute de ce pourcentage par rapport à la moyenne.', 'postal-warmup' ) . '</p>';
+	}
+
+	// === White Label Callbacks ===
+
+	public function whitelabel_section_callback() { echo '<p>' . __( 'Personnalisez l\'apparence du plugin pour vos clients (Marque Blanche).', 'postal-warmup' ) . '</p>'; }
+
+	public function wl_menu_name_field() {
+		$value = get_option( 'pw_wl_menu_name', 'Postal Warmup' );
+		echo '<input type="text" name="pw_wl_menu_name" value="' . esc_attr( $value ) . '" class="regular-text">';
+	}
+
+	public function wl_menu_icon_field() {
+		$value = get_option( 'pw_wl_menu_icon', 'dashicons-email-alt' );
+		echo '<input type="text" name="pw_wl_menu_icon" value="' . esc_attr( $value ) . '" class="regular-text">';
+		echo '<p class="description">' . __( 'Nom de l\'icône Dashicon (ex: dashicons-chart-line, dashicons-email-alt). <a href="https://developer.wordpress.org/resource/dashicons/" target="_blank">Voir la liste</a>', 'postal-warmup' ) . '</p>';
+	}
+
+	public function wl_hide_footer_field() {
+		$value = get_option( 'pw_wl_hide_footer', false );
+		echo '<label><input type="checkbox" name="pw_wl_hide_footer" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Masquer les mentions du plugin dans le footer admin', 'postal-warmup' ) . '</label>';
+	}
+
+	public function wl_custom_css_field() {
+		$value = get_option( 'pw_wl_custom_css', '' );
+		echo '<textarea name="pw_wl_custom_css" rows="5" cols="50" class="large-text code">' . esc_textarea( $value ) . '</textarea>';
+		echo '<p class="description">' . __( 'Ce CSS sera chargé sur toutes les pages du plugin.', 'postal-warmup' ) . '</p>';
 	}
 }

@@ -79,6 +79,9 @@ class Plugin {
 
 		// Initialize Advisor Listeners
 		\PostalWarmup\Services\WarmupAdvisor::init();
+
+		// Initialize Webhook Dispatcher
+		\PostalWarmup\Services\WebhookDispatcher::init();
 	}
 
 	/**

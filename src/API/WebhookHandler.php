@@ -124,6 +124,9 @@ class WebhookHandler {
 			default:
 				// Ignore others
 		}
+
+		// Hook for external integrations (e.g. WebhookDispatcher)
+		do_action( 'pw_postal_webhook_event', $event, $payload, $ctx );
 	}
 
 	private function identify_context( $payload ) {

@@ -198,6 +198,9 @@ class QueueManager {
                     'server' => $domain,
                     'error' => $result['error'] ?? 'Unknown'
                 ]);
+
+                // Hook: Item Failed (Webhook/Audit)
+                do_action( 'pw_queue_item_failed', $id, $item, $result['error'] ?? 'Unknown' );
             }
 
             // 7. Update V3 Stats (Tracking)

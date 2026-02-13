@@ -60,6 +60,18 @@ class Settings {
 
 		register_setting( 'postal-warmup-settings', 'pw_advisor_enabled', array( 'type' => 'boolean', 'default' => true ) );
 		add_settings_field( 'pw_advisor_enabled', __( 'Activer l\'Advisor', 'postal-warmup' ), array( $this, 'advisor_enabled_field' ), 'postal-warmup-settings', 'pw_performance_section' );
+
+		// === Section Webhooks ===
+		add_settings_section( 'pw_webhooks_section', __( 'Webhooks', 'postal-warmup' ), array( $this, 'webhooks_section_callback' ), 'postal-warmup-settings' );
+
+		register_setting( 'postal-warmup-settings', 'pw_webhook_enabled', array( 'type' => 'boolean', 'default' => false ) );
+		add_settings_field( 'pw_webhook_enabled', __( 'Activer le Webhook', 'postal-warmup' ), array( $this, 'webhook_enabled_field' ), 'postal-warmup-settings', 'pw_webhooks_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_webhook_url', array( 'type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => '' ) );
+		add_settings_field( 'pw_webhook_url', __( 'URL du Webhook', 'postal-warmup' ), array( $this, 'webhook_url_field' ), 'postal-warmup-settings', 'pw_webhooks_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_webhook_events', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_webhook_events' ), 'default' => [] ) );
+		add_settings_field( 'pw_webhook_events', __( 'Événements', 'postal-warmup' ), array( $this, 'webhook_events_field' ), 'postal-warmup-settings', 'pw_webhooks_section' );
 	}
 
 	public function general_section_callback() { echo '<p>' . __( 'Configuration générale des envois.', 'postal-warmup' ) . '</p>'; }
@@ -146,5 +158,50 @@ class Settings {
 	public function advisor_enabled_field() {
 		$value = get_option( 'pw_advisor_enabled', true );
 		echo '<label><input type="checkbox" name="pw_advisor_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Activer l\'analyse automatique (Conseiller Warmup)', 'postal-warmup' ) . '</label>';
+	}
+
+	// === Webhooks Callbacks ===
+
+	public function webhooks_section_callback() { echo '<p>' . __( 'Configurez un webhook pour recevoir des notifications lors des événements d\'envoi.', 'postal-warmup' ) . '</p>'; }
+
+	public function webhook_enabled_field() {
+		$value = get_option( 'pw_webhook_enabled', false );
+		echo '<label><input type="checkbox" name="pw_webhook_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Activer l\'envoi de requêtes vers ce webhook', 'postal-warmup' ) . '</label>';
+	}
+
+	public function webhook_url_field() {
+		$value = get_option( 'pw_webhook_url', '' );
+		echo '<input type="url" name="pw_webhook_url" value="' . esc_attr( $value ) . '" class="regular-text" placeholder="https://exemple.com/webhook">';
+		echo '<p class="description">' . __( 'L\'URL qui recevra les requêtes POST avec un payload JSON.', 'postal-warmup' ) . '</p>';
+	}
+
+	public function webhook_events_field() {
+		$events = get_option( 'pw_webhook_events', [] );
+		if ( ! is_array( $events ) ) $events = [];
+
+		$available_events = [
+			'MessageSent' => __( 'MessageSent (Succès d\'envoi)', 'postal-warmup' ),
+			'MessageDeliveryFailed' => __( 'MessageDeliveryFailed (Échec d\'envoi)', 'postal-warmup' ),
+			'MessageDelayed' => __( 'MessageDelayed (Retardé)', 'postal-warmup' ),
+			'MessageHeld' => __( 'MessageHeld (Retenu)', 'postal-warmup' ),
+			'MessageBounced' => __( 'MessageBounced (Rebond)', 'postal-warmup' ),
+			'MessageLinkClicked' => __( 'MessageLinkClicked (Clic)', 'postal-warmup' ),
+			'MessageLoaded' => __( 'MessageLoaded (Ouverture)', 'postal-warmup' ),
+			'DomainDNSError' => __( 'DomainDNSError (Erreur DNS)', 'postal-warmup' ),
+		];
+
+		echo '<fieldset>';
+		foreach ( $available_events as $key => $label ) {
+			$checked = in_array( $key, $events ) ? 'checked="checked"' : '';
+			echo '<label style="display:block; margin-bottom: 5px;">';
+			echo '<input type="checkbox" name="pw_webhook_events[]" value="' . esc_attr( $key ) . '" ' . $checked . '> ' . esc_html( $label );
+			echo '</label>';
+		}
+		echo '</fieldset>';
+	}
+
+	public function sanitize_webhook_events( $input ) {
+		if ( ! is_array( $input ) ) return [];
+		return array_map( 'sanitize_text_field', $input );
 	}
 }

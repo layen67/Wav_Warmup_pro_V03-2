@@ -16,11 +16,17 @@
             
             // Envoyer la requête AJAX (non-bloquante)
             $.post(pwMailto.ajaxurl, {
-                action: 'pw_track_mailto_click',
+                action: 'pw_mailto_click',
                 nonce: pwMailto.nonce,
                 template: template,
                 server: server,
                 page_url: pageUrl
+            }, function(response) {
+                if (response.success) {
+                    console.log('Postal Warmup: Click tracked');
+                } else {
+                    console.warn('Postal Warmup: Tracking failed', response);
+                }
             });
             
             // Le clic continue normalement (ouvre le client mail)

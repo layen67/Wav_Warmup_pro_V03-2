@@ -117,6 +117,9 @@ class Settings {
 
 		register_setting( 'postal-warmup-settings', 'pw_domscan_api_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => '' ) );
 		add_settings_field( 'pw_domscan_api_key', __( 'Clé API DomScan', 'postal-warmup' ), array( $this, 'domscan_api_key_field' ), 'postal-warmup-settings', 'pw_domscan_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_domscan_tools', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_domscan_tools' ), 'default' => [ 'health', 'blacklist', 'reputation' ] ) );
+		add_settings_field( 'pw_domscan_tools', __( 'Outils à utiliser', 'postal-warmup' ), array( $this, 'domscan_tools_field' ), 'postal-warmup-settings', 'pw_domscan_section' );
 	}
 
 	public function general_section_callback() { echo '<p>' . __( 'Configuration générale des envois.', 'postal-warmup' ) . '</p>'; }
@@ -337,5 +340,31 @@ class Settings {
 		$value = get_option( 'pw_domscan_api_key', '' );
 		echo '<input type="text" name="pw_domscan_api_key" value="' . esc_attr( $value ) . '" class="regular-text" placeholder="sk_...">';
 		echo '<p class="description">' . __( 'Requis pour les audits automatiques.', 'postal-warmup' ) . '</p>';
+	}
+
+	public function domscan_tools_field() {
+		$tools = get_option( 'pw_domscan_tools', [ 'health', 'blacklist', 'reputation' ] );
+		if ( ! is_array( $tools ) ) $tools = [];
+
+		$available = [
+			'health' => __( 'Santé du Domaine (DNS, Config)', 'postal-warmup' ),
+			'blacklist' => __( 'Vérification Blacklist (RBL)', 'postal-warmup' ),
+			'reputation' => __( 'Score de Réputation', 'postal-warmup' ),
+			'ssl' => __( 'Analyse SSL', 'postal-warmup' ),
+		];
+
+		echo '<fieldset>';
+		foreach ( $available as $key => $label ) {
+			$checked = in_array( $key, $tools ) ? 'checked="checked"' : '';
+			echo '<label style="display:block; margin-bottom: 5px;">';
+			echo '<input type="checkbox" name="pw_domscan_tools[]" value="' . esc_attr( $key ) . '" ' . $checked . '> ' . esc_html( $label );
+			echo '</label>';
+		}
+		echo '</fieldset>';
+	}
+
+	public function sanitize_domscan_tools( $input ) {
+		if ( ! is_array( $input ) ) return [];
+		return array_map( 'sanitize_text_field', $input );
 	}
 }

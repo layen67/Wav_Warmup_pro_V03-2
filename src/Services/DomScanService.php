@@ -4,7 +4,7 @@ namespace PostalWarmup\Services;
 
 class DomScanService {
 
-    private static $api_base = 'https://api.domscan.net/v1'; // Hypothetical Endpoint
+    private static $api_base = 'https://api.domscan.net/v1';
 
     /**
      * Lance un audit complet pour un domaine
@@ -16,28 +16,47 @@ class DomScanService {
             return new \WP_Error( 'missing_key', 'Clé API DomScan manquante.' );
         }
 
-        // 1. Check Health (DNS, SSL, etc.)
-        $health = self::request( '/domain/health', [ 'domain' => $domain ], $api_key );
-        if ( is_wp_error( $health ) ) return $health;
-
-        // 2. Check Blacklist
-        $blacklist = self::request( '/email/blacklist', [ 'domain' => $domain ], $api_key );
-
-        // 3. Check Reputation
-        $reputation = self::request( '/domain/reputation', [ 'domain' => $domain ], $api_key );
-
-        // Aggregate Results
+        $tools = get_option( 'pw_domscan_tools', [ 'health', 'blacklist', 'reputation' ] );
         $result = [
             'timestamp' => current_time( 'mysql' ),
             'domain' => $domain,
-            'health_score' => $health['data']['score'] ?? 0, // Mock structure
-            'health_issues' => $health['data']['issues'] ?? [],
-            'blacklist_count' => $blacklist['data']['listed_count'] ?? 0,
-            'reputation_score' => $reputation['data']['trust_score'] ?? 0,
-            'spf_valid' => $health['data']['spf']['valid'] ?? false,
-            'dkim_valid' => $health['data']['dkim']['valid'] ?? false,
-            'dmarc_valid' => $health['data']['dmarc']['valid'] ?? false,
         ];
+
+        // 1. Check Health (DNS, SSL, etc.)
+        if ( in_array( 'health', $tools ) ) {
+            $health = self::request( '/health', [ 'domain' => $domain ], $api_key ); // Corrected endpoint
+            if ( ! is_wp_error( $health ) ) {
+                $result['health_score'] = $health['data']['score'] ?? 0;
+                $result['health_issues'] = $health['data']['issues'] ?? [];
+                $result['spf_valid'] = $health['data']['spf']['valid'] ?? false;
+                $result['dkim_valid'] = $health['data']['dkim']['valid'] ?? false;
+                $result['dmarc_valid'] = $health['data']['dmarc']['valid'] ?? false;
+            }
+        }
+
+        // 2. Check Blacklist
+        if ( in_array( 'blacklist', $tools ) ) {
+            $blacklist = self::request( '/email/check', [ 'domain' => $domain ], $api_key ); // Corrected endpoint
+            if ( ! is_wp_error( $blacklist ) ) {
+                $result['blacklist_count'] = $blacklist['data']['listed_count'] ?? 0;
+            }
+        }
+
+        // 3. Check Reputation
+        if ( in_array( 'reputation', $tools ) ) {
+            $reputation = self::request( '/reputation', [ 'domain' => $domain ], $api_key ); // Corrected endpoint
+            if ( ! is_wp_error( $reputation ) ) {
+                $result['reputation_score'] = $reputation['data']['trust_score'] ?? 0;
+            }
+        }
+
+        // 4. SSL (Optional)
+        if ( in_array( 'ssl', $tools ) ) {
+            $ssl = self::request( '/ssl/grade', [ 'domain' => $domain ], $api_key );
+            if ( ! is_wp_error( $ssl ) ) {
+                $result['ssl_grade'] = $ssl['data']['grade'] ?? '-';
+            }
+        }
 
         // Save to transient for display
         set_transient( 'pw_domscan_' . md5( $domain ), $result, 12 * HOUR_IN_SECONDS );

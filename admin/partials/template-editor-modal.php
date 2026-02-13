@@ -235,6 +235,8 @@ if (!defined('ABSPATH')) exit;
                 <button type="button" class="pw-toggle-btn" data-mode="preview">Preview</button>
             </div>
             <div class="pw-toolbar-group">
+                <button type="button" class="pw-expand-btn" title="Mode Focus (Plein écran)"><span class="dashicons dashicons-editor-expand"></span></button>
+                <div style="width: 1px; background: #ddd; margin: 0 5px;"></div>
                 <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Base64</button>
                 <button type="button" class="pw-base64-decode-btn" title="Décoder le contenu Base64">Décoder</button>
             </div>
@@ -250,16 +252,24 @@ if (!defined('ABSPATH')) exit;
 <style>
 .pw-variant-item {
     position: relative;
-    margin-bottom: 10px;
+    margin-bottom: 20px;
 }
 .pw-variant-toolbar {
     margin-bottom: 5px;
     display: flex;
+    flex-wrap: wrap; /* Allow wrapping on small screens */
     justify-content: space-between;
     align-items: center;
+    background: #f6f7f7; /* Slight background for toolbar */
+    padding: 5px;
+    border: 1px solid #c3c4c7;
+    border-bottom: none; /* Connect to textarea */
+    border-radius: 4px 4px 0 0;
 }
 .pw-toolbar-group {
     display: flex;
+    align-items: center;
+    gap: 5px; /* Spacing between items */
 }
 .pw-toggle-btn {
     padding: 3px 10px;
@@ -324,6 +334,20 @@ if (!defined('ABSPATH')) exit;
 .pw-base64-decode-btn:hover {
     border-color: #4f46e5;
 }
+.pw-expand-btn {
+    padding: 3px 5px;
+    font-size: 14px;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    color: #50575e;
+    line-height: 1;
+}
+.pw-expand-btn:hover {
+    border-color: #2271b1;
+    color: #2271b1;
+}
 .pw-variant-preview {
     border: 1px solid #c3c4c7;
     padding: 10px;
@@ -339,6 +363,47 @@ if (!defined('ABSPATH')) exit;
     font-family: initial;
     white-space: normal;
     word-break: normal;
+}
+/* Focus Mode Styles */
+.pw-focus-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
+    z-index: 999999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.pw-focus-container {
+    background: #fff;
+    width: 90%;
+    height: 90%;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+}
+.pw-focus-header {
+    padding: 10px 15px;
+    background: #f0f0f1;
+    border-bottom: 1px solid #c3c4c7;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.pw-focus-header h3 { margin: 0; }
+.pw-focus-close {
+    background: none; border: none; font-size: 24px; cursor: pointer; color: #d63638;
+}
+.pw-focus-textarea {
+    flex: 1;
+    width: 100%;
+    padding: 20px;
+    font-family: monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    border: none;
+    resize: none;
+    outline: none;
 }
 </style>
 

@@ -825,35 +825,89 @@
 
             this.bindBase64Events();
 
+            // Toolbar: Expand/Focus Mode
+            $(document).on('click', '.pw-expand-btn', function(e) {
+                e.preventDefault();
+                const $editor = $(this).closest('.pw-variant-item').find('.pw-variant-editor');
+                const $textarea = $editor.find('.pw-variant-input');
+
+                // Create fullscreen modal
+                const $overlay = $('<div class="pw-focus-overlay"><div class="pw-focus-container"><div class="pw-focus-header"><h3>Mode Édition (Focus)</h3><button class="pw-focus-close">&times;</button></div><textarea class="pw-focus-textarea"></textarea></div></div>');
+
+                $('body').append($overlay);
+                $overlay.find('textarea').val($textarea.val()).focus();
+
+                // Sync back on close
+                const closeFocus = () => {
+                    $textarea.val($overlay.find('textarea').val()).trigger('input');
+                    $overlay.remove();
+                };
+
+                $overlay.find('.pw-focus-close').on('click', closeFocus);
+                $overlay.on('click', function(e) {
+                    if ($(e.target).hasClass('pw-focus-overlay')) closeFocus();
+                });
+            });
+
             // Toolbar: Insert Variable
-            $(document).on('change', '.pw-var-select', function() {
+            $(document).on('change', '.pw-var-select', function(e) {
+                e.preventDefault();
                 const val = $(this).val();
                 if (val) {
-                    const $textarea = $(this).closest('.pw-variant-item').find('.pw-variant-input');
-                    TemplateEditor.insertAtCursor($textarea[0], val);
+                    // Fix: Target the specific textarea within the same variant item using robust selector
+                    const $container = $(this).closest('.pw-variant-item');
+                    const $textarea = $container.find('textarea.pw-variant-input');
+
+                    if ($textarea.length) {
+                        TemplateEditor.insertAtCursor($textarea[0], val);
+                    } else {
+                        console.error('Textarea not found for variable insertion');
+                    }
                     $(this).val(''); // Reset
                 }
             });
 
             // Toolbar: Insert Spintax
-            $(document).on('click', '.pw-spintax-btn', function() {
-                const $textarea = $(this).closest('.pw-variant-item').find('.pw-variant-input');
-                TemplateEditor.insertAtCursor($textarea[0], '{ | }');
+            $(document).on('click', '.pw-spintax-btn', function(e) {
+                e.preventDefault();
+                const $container = $(this).closest('.pw-variant-item');
+                const $textarea = $container.find('textarea.pw-variant-input');
+
+                if ($textarea.length) {
+                    TemplateEditor.insertAtCursor($textarea[0], '{ | }');
+                }
             });
         },
 
         insertAtCursor(field, value) {
             if (!field) return;
-            if (field.selectionStart || field.selectionStart === 0) {
-                var startPos = field.selectionStart;
-                var endPos = field.selectionEnd;
-                field.value = field.value.substring(0, startPos) + value + field.value.substring(endPos, field.value.length);
-                field.selectionStart = startPos + value.length;
-                field.selectionEnd = startPos + value.length;
+
+            // Modern browsers support setRangeText
+            if (typeof field.setRangeText === 'function') {
+                field.setRangeText(value);
+                // Move cursor to end of inserted text
+                field.selectionStart = field.selectionEnd = field.selectionEnd + value.length;
+
+                // If inserting spintax, place cursor inside braces
+                if (value === '{ | }') {
+                    field.selectionStart = field.selectionEnd - 4; // Inside { | } -> { | }
+                }
             } else {
-                field.value += value;
+                // Fallback
+                if (document.selection) {
+                    field.focus();
+                    var sel = document.selection.createRange();
+                    sel.text = value;
+                } else if (field.selectionStart || field.selectionStart == '0') {
+                    var startPos = field.selectionStart;
+                    var endPos = field.selectionEnd;
+                    field.value = field.value.substring(0, startPos) + value + field.value.substring(endPos, field.value.length);
+                } else {
+                    field.value += value;
+                }
             }
-            $(field).trigger('input').focus(); // Trigger input for auto-save listeners if any
+
+            $(field).trigger('input').focus();
         },
 
         // Toolbar: Base64 Encode

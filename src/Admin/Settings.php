@@ -72,6 +72,30 @@ class Settings {
 
 		register_setting( 'postal-warmup-settings', 'pw_webhook_events', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_webhook_events' ), 'default' => [] ) );
 		add_settings_field( 'pw_webhook_events', __( 'Événements', 'postal-warmup' ), array( $this, 'webhook_events_field' ), 'postal-warmup-settings', 'pw_webhooks_section' );
+
+		// === Section Health & Safety ===
+		add_settings_section( 'pw_safety_section', __( 'Santé & Sécurité', 'postal-warmup' ), array( $this, 'safety_section_callback' ), 'postal-warmup-settings' );
+
+		register_setting( 'postal-warmup-settings', 'pw_health_score_threshold', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 50 ) );
+		add_settings_field( 'pw_health_score_threshold', __( 'Seuil Critique de Santé', 'postal-warmup' ), array( $this, 'health_score_threshold_field' ), 'postal-warmup-settings', 'pw_safety_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_health_score_action', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key', 'default' => 'none' ) );
+		add_settings_field( 'pw_health_score_action', __( 'Action sur Score Faible', 'postal-warmup' ), array( $this, 'health_score_action_field' ), 'postal-warmup-settings', 'pw_safety_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_smart_routing_enabled', array( 'type' => 'boolean', 'default' => true ) );
+		add_settings_field( 'pw_smart_routing_enabled', __( 'Rotation Intelligente (Smart Routing)', 'postal-warmup' ), array( $this, 'smart_routing_enabled_field' ), 'postal-warmup-settings', 'pw_safety_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_smart_routing_error_threshold', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 5 ) );
+		add_settings_field( 'pw_smart_routing_error_threshold', __( 'Seuil d\'Erreurs par ISP (%)', 'postal-warmup' ), array( $this, 'smart_routing_error_threshold_field' ), 'postal-warmup-settings', 'pw_safety_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_smart_routing_cooldown', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 60 ) );
+		add_settings_field( 'pw_smart_routing_cooldown', __( 'Durée de Pénalité (Cooldown)', 'postal-warmup' ), array( $this, 'smart_routing_cooldown_field' ), 'postal-warmup-settings', 'pw_safety_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_reputation_monitoring_enabled', array( 'type' => 'boolean', 'default' => true ) );
+		add_settings_field( 'pw_reputation_monitoring_enabled', __( 'Surveillance de la Réputation', 'postal-warmup' ), array( $this, 'reputation_monitoring_enabled_field' ), 'postal-warmup-settings', 'pw_safety_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_reputation_drop_sensitivity', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 20 ) );
+		add_settings_field( 'pw_reputation_drop_sensitivity', __( 'Sensibilité de Chute (%)', 'postal-warmup' ), array( $this, 'reputation_drop_sensitivity_field' ), 'postal-warmup-settings', 'pw_safety_section' );
 	}
 
 	public function general_section_callback() { echo '<p>' . __( 'Configuration générale des envois.', 'postal-warmup' ) . '</p>'; }
@@ -207,5 +231,51 @@ class Settings {
 	public function sanitize_webhook_events( $input ) {
 		if ( ! is_array( $input ) ) return [];
 		return array_map( 'sanitize_text_field', $input );
+	}
+
+	// === Health & Safety Callbacks ===
+
+	public function safety_section_callback() { echo '<p>' . __( 'Configurez les seuils de sécurité et les actions automatiques pour protéger votre réputation.', 'postal-warmup' ) . '</p>'; }
+
+	public function health_score_threshold_field() {
+		$value = get_option( 'pw_health_score_threshold', 50 );
+		echo '<input type="number" name="pw_health_score_threshold" value="' . esc_attr( $value ) . '" class="small-text" min="0" max="100"> ' . __( '/ 100', 'postal-warmup' );
+		echo '<p class="description">' . __( 'Si le score de santé passe sous ce seuil, une alerte sera déclenchée.', 'postal-warmup' ) . '</p>';
+	}
+
+	public function health_score_action_field() {
+		$value = get_option( 'pw_health_score_action', 'none' );
+		echo '<select name="pw_health_score_action">';
+		echo '<option value="none" ' . selected( $value, 'none', false ) . '>' . __( 'Aucune (Alerte seulement)', 'postal-warmup' ) . '</option>';
+		echo '<option value="pause" ' . selected( $value, 'pause', false ) . '>' . __( 'Mettre le serveur en pause', 'postal-warmup' ) . '</option>';
+		echo '<option value="reduce_50" ' . selected( $value, 'reduce_50', false ) . '>' . __( 'Réduire le volume de 50%', 'postal-warmup' ) . '</option>';
+		echo '</select>';
+	}
+
+	public function smart_routing_enabled_field() {
+		$value = get_option( 'pw_smart_routing_enabled', true );
+		echo '<label><input type="checkbox" name="pw_smart_routing_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Activer la Rotation Intelligente', 'postal-warmup' ) . '</label>';
+		echo '<p class="description">' . __( 'Si activé, les erreurs sur un ISP spécifique (ex: Gmail) n\'affecteront pas les envois vers les autres ISPs.', 'postal-warmup' ) . '</p>';
+	}
+
+	public function smart_routing_error_threshold_field() {
+		$value = get_option( 'pw_smart_routing_error_threshold', 5 );
+		echo '<input type="number" name="pw_smart_routing_error_threshold" value="' . esc_attr( $value ) . '" class="small-text" min="1" max="100"> ' . __( '% d\'erreurs', 'postal-warmup' );
+	}
+
+	public function smart_routing_cooldown_field() {
+		$value = get_option( 'pw_smart_routing_cooldown', 60 );
+		echo '<input type="number" name="pw_smart_routing_cooldown" value="' . esc_attr( $value ) . '" class="small-text" min="1"> ' . __( 'minutes', 'postal-warmup' );
+	}
+
+	public function reputation_monitoring_enabled_field() {
+		$value = get_option( 'pw_reputation_monitoring_enabled', true );
+		echo '<label><input type="checkbox" name="pw_reputation_monitoring_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Surveiller les chutes de réputation', 'postal-warmup' ) . '</label>';
+	}
+
+	public function reputation_drop_sensitivity_field() {
+		$value = get_option( 'pw_reputation_drop_sensitivity', 20 );
+		echo '<input type="number" name="pw_reputation_drop_sensitivity" value="' . esc_attr( $value ) . '" class="small-text" min="1" max="100"> ' . __( '% de baisse', 'postal-warmup' );
+		echo '<p class="description">' . __( 'Déclenche une alerte si le taux d\'ouverture chute de ce pourcentage par rapport à la moyenne.', 'postal-warmup' ) . '</p>';
 	}
 }

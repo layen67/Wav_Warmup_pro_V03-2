@@ -31,6 +31,9 @@ class WarmupAdvisor {
 			if ( empty($server['active']) ) continue;
 			self::analyze_server( $server );
 		}
+
+		// Run Smart Advisor Checks
+		self::check_health_and_routing();
 	}
 
 	private static function analyze_server( $server ) {
@@ -131,6 +134,59 @@ class WarmupAdvisor {
 				$new_day = max( 1, $current_day - 2 );
 				$wpdb->update( $table, [ 'warmup_day' => $new_day ], [ 'id' => $server_id ] );
 				break;
+		}
+	}
+
+	public static function check_health_and_routing() {
+		$servers = Database::get_servers();
+		foreach ( $servers as $server ) {
+			if ( empty($server['active']) ) continue;
+
+			// --- Health Score Check ---
+			$score = HealthScoreCalculator::calculate_score( $server['id'] );
+			$threshold = (int) get_option( 'pw_health_score_threshold', 50 );
+
+			if ( $score < $threshold ) {
+				$action = get_option( 'pw_health_score_action', 'none' );
+				Logger::warning( "Santé Critique ({$score}/100) pour {$server['domain']}. Action: $action" );
+
+				if ( $action === 'pause' ) {
+					// Pause Server
+					global $wpdb;
+					$wpdb->update( $wpdb->prefix . 'postal_servers', [ 'active' => 0 ], [ 'id' => $server['id'] ] );
+					do_action( 'pw_advisor_recommendation', $server['id'], [
+						'isp' => 'Global',
+						'action' => 'pause_server',
+						'reason' => "Health Score too low ($score < $threshold)"
+					] );
+				} elseif ( $action === 'reduce_50' ) {
+					// Reduce Limit (Not implemented yet, requires dynamic limit override or just reduce day)
+					// Let's reduce day heavily
+					$new_day = max( 1, (int)($server['warmup_day'] / 2) );
+					global $wpdb;
+					$wpdb->update( $wpdb->prefix . 'postal_servers', [ 'warmup_day' => $new_day ], [ 'id' => $server['id'] ] );
+				}
+			}
+
+			// --- Smart Routing Check ---
+			if ( get_option( 'pw_smart_routing_enabled', true ) ) {
+				$isp_rates = HealthScoreCalculator::get_isp_error_rates( $server['id'] );
+				$error_threshold = (int) get_option( 'pw_smart_routing_error_threshold', 5 );
+				$cooldown_min = (int) get_option( 'pw_smart_routing_cooldown', 60 );
+
+				foreach ( $isp_rates as $isp => $rate ) {
+					if ( $rate > $error_threshold ) {
+						// Set Cooldown
+						$transient_key = "pw_cooldown_{$server['id']}_{$isp}";
+						if ( ! get_transient( $transient_key ) ) {
+							set_transient( $transient_key, true, $cooldown_min * 60 );
+							Logger::warning( "Smart Routing: {$server['domain']} bloqué sur $isp pour $cooldown_min min (Taux erreur: " . round($rate,1) . "%)" );
+
+							do_action( 'pw_smart_routing_triggered', $server['id'], $isp, $rate );
+						}
+					}
+				}
+			}
 		}
 	}
 }

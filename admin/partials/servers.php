@@ -372,6 +372,7 @@ if ($action === 'delete' && $server_id) {
                     <thead>
                         <tr>
                             <th><?php _e('Domaine', 'postal-warmup'); ?></th>
+                            <th><?php _e('Santé', 'postal-warmup'); ?></th>
                             <th><?php _e('Utilisation Jour', 'postal-warmup'); ?></th>
                             <th><?php _e('Priorité', 'postal-warmup'); ?></th>
                             <th><?php _e('Statut', 'postal-warmup'); ?></th>
@@ -383,6 +384,10 @@ if ($action === 'delete' && $server_id) {
                     <tbody>
                         <?php 
                         foreach ($servers as $server) {
+                            $health_score = \PostalWarmup\Services\HealthScoreCalculator::calculate_score($server['id']);
+                            $health_color = '#46b450'; // Green
+                            if ($health_score < 50) $health_color = '#dc3232'; // Red
+                            elseif ($health_score < 80) $health_color = '#f0b849'; // Orange
                             $success_rate = 0;
                             if (isset($server['sent_count']) && $server['sent_count'] > 0) {
                                 $success_rate = round(($server['success_count'] / $server['sent_count']) * 100, 2);
@@ -411,6 +416,15 @@ if ($action === 'delete' && $server_id) {
                                 <td>
                                     <strong><?php echo esc_html($server['domain']); ?></strong>
                                     <div style="font-size:11px; color:#666;"><?php echo esc_html($server['timezone'] ?: 'UTC'); ?></div>
+                                </td>
+                                <td>
+                                    <div class="pw-health-badge" style="display:flex; align-items:center;">
+                                        <div style="width:10px; height:10px; border-radius:50%; background-color:<?php echo $health_color; ?>; margin-right:5px;"></div>
+                                        <strong><?php echo $health_score; ?>/100</strong>
+                                    </div>
+                                    <?php if ($health_score < 100) { ?>
+                                        <small style="color:#666; font-size:10px;">Analysé il y a 1h</small>
+                                    <?php } ?>
                                 </td>
                                 <td>
                                     <strong><?php echo $daily_used; ?></strong> <small>(Total Aujourd'hui)</small>

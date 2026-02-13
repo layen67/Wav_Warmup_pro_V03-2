@@ -448,4 +448,14 @@ class AjaxHandler {
 		StrategyManager::delete( (int)$_POST['id'] );
 		wp_send_json_success();
 	}
+
+	public function ajax_get_mailto_url() {
+		check_ajax_referer( 'pw_rotate', 'nonce' );
+
+		$template = sanitize_key( $_POST['template'] ?? 'support' );
+		$mailto = new \PostalWarmup\Services\Mailto();
+		$url = $mailto->build_mailto_url( $template );
+
+		wp_send_json_success( [ 'url' => $url ] );
+	}
 }

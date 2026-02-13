@@ -10,7 +10,13 @@ use PostalWarmup\Models\Database;
  */
 class TemplateLoader {
 
+	private static $cache = [];
+
 	public static function load( $name, $domain = null ) {
+		if ( isset( self::$cache[ $name ] ) ) {
+			return self::$cache[ $name ];
+		}
+
 		// Check DB first (v3 feature)
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_templates';
@@ -32,6 +38,7 @@ class TemplateLoader {
 					$data['tags'] = explode( ',', $db_template['tags'] );
 				}
 
+				self::$cache[ $name ] = $data;
 				return $data;
 			}
 		}
@@ -46,6 +53,7 @@ class TemplateLoader {
 					if (!isset($data['name'])) {
 						$data['name'] = $name;
 					}
+					self::$cache[ $name ] = $data;
 					return $data;
 				}
 			}
@@ -102,6 +110,10 @@ class TemplateLoader {
 
 		// Fallback to simple random
 		return $array[ array_rand( $array ) ];
+	}
+
+	public static function pick_weighted( $array ) {
+		return self::pick_random( $array );
 	}
 
 	public static function apply_placeholders( $text, $vars ) {

@@ -10,13 +10,31 @@ use PostalWarmup\Core\TemplateEngine;
 
 class Mailto {
 
-	private static $template_cache = [];
+	const DEFAULT_SUBJECTS = [
+		'Bonjour',
+		'Question',
+		'Prise de contact',
+		'Demande d\'information',
+		'Renseignement',
+	];
+
+	const DEFAULT_BODIES = [
+		"Bonjour,\n\nJe vous contacte pour un renseignement.\n\nCordialement",
+		"Bonjour,\n\nPourriez-vous m'aider avec une question ?\n\nMerci d'avance",
+		"Bonjour,\n\nJe souhaiterais obtenir plus d'informations.\n\nBien cordialement",
+		"Bonjour,\n\nAvez-vous un moment pour répondre à une question ?\n\nCordialement",
+	];
 
 	public function init() {
 		add_shortcode( 'postal_warmup', array( $this, 'render_shortcode' ) );
 		add_shortcode( 'warmup_mailto', array( $this, 'render_shortcode' ) );
+		add_shortcode( 'warmup_auto_link', array( $this, 'render_auto_link' ) );
 		add_action( 'wp_ajax_pw_mailto_click', array( $this, 'track_click' ) );
 		add_action( 'wp_ajax_nopriv_pw_mailto_click', array( $this, 'track_click' ) );
+		// New AJAX endpoint for full link rotation
+		add_action( 'wp_ajax_pw_get_mailto_url', array( $this, 'ajax_get_mailto_url' ) );
+		add_action( 'wp_ajax_nopriv_pw_get_mailto_url', array( $this, 'ajax_get_mailto_url' ) );
+
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 	}
 
@@ -44,22 +62,18 @@ class Mailto {
 			'prefix'   => '', // Override local part of email
 			'emails'   => '', // Comma-separated list of prefixes
 			'subjects' => '', // Inline subject variants (semicolon separated)
+			'bodies'   => '', // Inline body variants (pipe separated)
+			'spintax'  => 'auto', // auto|true|false
 			'rotate'   => 'false', // Enable JS rotation on hover
 		), $atts, 'postal_warmup' );
 
-		// 1. Load Template (with Cache)
-		$template_key = $atts['template'];
-		if ( isset( self::$template_cache[ $template_key ] ) ) {
-			$template_data = self::$template_cache[ $template_key ];
-		} else {
-			$template_data = TemplateLoader::load( $template_key );
-			if ( ! $template_data ) {
-				$template_data = TemplateLoader::get_fallback();
-			}
-			self::$template_cache[ $template_key ] = $template_data;
+		// 1. Load Template (Cached in TemplateLoader)
+		$tpl = TemplateLoader::load( $atts['template'] );
+		if ( ! $tpl ) {
+			$tpl = TemplateLoader::get_fallback();
 		}
 
-		if ( ! $template_data ) return '<!-- Postal Warmup: Template not found -->';
+		if ( ! $tpl ) return '<!-- Postal Warmup: Template not found -->';
 
 		// 2. Select Server (Load Balancer)
 		$server = null;
@@ -90,9 +104,16 @@ class Mailto {
 		// Priority 2: 'emails' param (random selection)
 		elseif ( ! empty( $atts['emails'] ) ) {
 			$prefixes = array_map( 'trim', explode( ',', $atts['emails'] ) );
-			$email_prefix = $prefixes[ array_rand( $prefixes ) ];
+			$prefixes = array_filter( $prefixes, fn($p) => preg_match('/^[a-z0-9._-]+$/i', $p) );
+			if ( ! empty( $prefixes ) ) {
+				$email_prefix = $prefixes[ array_rand( $prefixes ) ];
+			}
 		}
-		// Priority 3: Template name (if simple slug)
+		// Priority 3: Template 'mailto_email_prefix' (New feature)
+		elseif ( ! empty( $tpl['mailto_email_prefix'] ) ) {
+			$email_prefix = $tpl['mailto_email_prefix'];
+		}
+		// Priority 4: Template name (if simple slug)
 		elseif ( ! empty( $atts['template'] ) && preg_match( '/^[a-z0-9_.-]+$/i', $atts['template'] ) && $atts['template'] !== 'null' ) {
 			$email_prefix = $atts['template'];
 		}
@@ -100,57 +121,153 @@ class Mailto {
 		$email_to = ! empty( $atts['email'] ) ? $atts['email'] : $email_prefix . '@' . $server['domain'];
 
 		// 4. Prepare Subject & Body
-		// Subject Priority: Shortcode 'subject' > Shortcode 'subjects' (random) > Template 'mailto_subject' > Template 'subject'
-		$raw_subject = '';
+		$raw_subject_pool = $tpl['mailto_subject'] ?? [];
+		$raw_body_pool    = $tpl['mailto_body']    ?? [];
+
+		// Fallbacks if empty
+		if ( empty( $raw_subject_pool ) ) $raw_subject_pool = self::DEFAULT_SUBJECTS;
+		if ( empty( $raw_body_pool ) )    $raw_body_pool    = self::DEFAULT_BODIES;
+
+		// Subject Priority: Shortcode 'subject' > Shortcode 'subjects' > Template (Weighted)
+		$subject = '';
 		if ( ! empty( $atts['subject'] ) ) {
-			$raw_subject = $atts['subject'];
+			$subject = $atts['subject'];
 		} elseif ( ! empty( $atts['subjects'] ) ) {
 			$subjects_list = array_map( 'trim', explode( ';', $atts['subjects'] ) );
-			$raw_subject = $subjects_list[ array_rand( $subjects_list ) ];
+			$subject = $subjects_list[ array_rand( $subjects_list ) ];
 		} else {
-			// Neutral Fallback: Use mailto_subject if available, else standard subject
-			$pool = ! empty( $template_data['mailto_subject'] ) ? $template_data['mailto_subject'] : ( $template_data['subject'] ?? [] );
-			$raw_subject = TemplateLoader::pick_random( $pool );
+			$subject = TemplateLoader::pick_weighted( $raw_subject_pool );
 		}
 
-		// Body Priority: Shortcode 'body' > Template 'mailto_body' > Template 'text'
-		$raw_body = '';
+		// Body Priority: Shortcode 'body' > Shortcode 'bodies' > Template (Weighted)
+		$body = '';
 		if ( ! empty( $atts['body'] ) ) {
-			$raw_body = $atts['body'];
+			$body = $atts['body'];
+		} elseif ( ! empty( $atts['bodies'] ) ) {
+			$bodies_list = array_map( 'trim', explode( '|', $atts['bodies'] ) );
+			$body = $bodies_list[ array_rand( $bodies_list ) ];
 		} else {
-			$pool = ! empty( $template_data['mailto_body'] ) ? $template_data['mailto_body'] : ( $template_data['text'] ?? [] );
-			$raw_body = TemplateLoader::pick_random( $pool );
+			$body = TemplateLoader::pick_weighted( $raw_body_pool );
 		}
 
 		// 5. Processing (Spintax -> Vars -> Encoding)
-		$subject = TemplateEngine::process_spintax( $raw_subject );
-		$body    = TemplateEngine::process_spintax( $raw_body );
+		$use_spintax = ( $atts['spintax'] === 'true' )
+			|| ( $atts['spintax'] === 'auto' && ! empty( $tpl['spintax_enabled'] ) );
+
+		if ( $use_spintax ) {
+			$subject = TemplateEngine::process_spintax( $subject );
+			$body    = TemplateEngine::process_spintax( $body );
+		}
 
 		$subject = $this->process_variables( $subject );
 		$body    = $this->process_variables( $body );
 
-		// Fix Encoding: Normalize newlines to CRLF before encoding
-		$body = str_replace( array( "\r\n", "\r", "\n" ), "\r\n", $body );
+		// Fix Encoding: Clean HTML -> Decode Entities -> Raw URL Encode
+		// Removes manual newline replacement as rawurlencode handles %0A correctly
+		$body_clean = wp_strip_all_tags( $body );
+		$body_clean = html_entity_decode( $body_clean, ENT_QUOTES, 'UTF-8' );
 		
 		$mailto_url = 'mailto:' . sanitize_email( $email_to ) .
 		              '?subject=' . rawurlencode( $subject ) .
-		              '&body=' . rawurlencode( $body );
+		              '&body=' . rawurlencode( $body_clean );
 
 		// 6. Label Logic
-		if ( ! empty( $template_data['default_label'] ) ) {
-			$atts['label'] = $template_data['default_label'];
+		if ( ! empty( $tpl['mailto_label'] ) ) {
+			$atts['label'] = $tpl['mailto_label']; // New field alias
+		} elseif ( ! empty( $tpl['default_label'] ) ) {
+			$atts['label'] = $tpl['default_label'];
 		} elseif ( ! empty( $content ) ) {
 			$atts['label'] = do_shortcode( $content );
 		}
 
 		// 7. Rotation Data
+		// Logic: If rotate=true, we pass data attributes.
+		// If emails list is provided, existing JS handles it locally.
+		// If NO emails list but rotate=true, we might want full AJAX rotation (new feature).
+
+		// If emails param is present, we prefer local rotation (faster).
 		if ( $atts['rotate'] === 'true' && ! empty( $atts['emails'] ) ) {
-			// Pass variants to JS
-			$atts['data-rotate-emails'] = $atts['emails']; // raw list
+			$atts['data-rotate-emails'] = $atts['emails'];
 			$atts['data-server-domain'] = $server['domain'];
+		}
+		// If rotate=true and NO local emails list, we use AJAX rotation for full refresh
+		elseif ( $atts['rotate'] === 'true' ) {
+			$atts['data-rotate'] = 'true'; // Used by JS to trigger AJAX
+			// We need to pass nonce for the new AJAX action
+			$atts['data-nonce'] = wp_create_nonce( 'pw_rotate' );
 		}
 
 		return $this->generate_html( $mailto_url, $atts, $server );
+	}
+
+	public function render_auto_link( $atts, $content = null ) {
+		// Defaults specific to auto link
+		$atts = shortcode_atts( [
+			'template' => 'support',
+			'track'    => 'false',
+			'display'  => 'link',
+			// Pass-through other potentially useful ones
+			'prefix' => '', 'emails' => '', 'subject' => '', 'body' => '',
+			'subjects' => '', 'bodies' => '', 'spintax' => 'auto'
+		], $atts, 'warmup_auto_link' );
+
+		// Re-use main render logic
+		return $this->render_shortcode( $atts, $content );
+	}
+
+	public function build_mailto_url( $template_slug ) {
+		// Public helper for AJAX usage
+		// Replicates logic of render_shortcode but returns just the URL string
+
+		$tpl = TemplateLoader::load( $template_slug );
+		if ( ! $tpl ) $tpl = TemplateLoader::get_fallback();
+		if ( ! $tpl ) return '';
+
+		// Select Server
+		$context = [ 'ignore_limits' => true ];
+		if ( is_user_logged_in() ) {
+			$user = wp_get_current_user();
+			if ( ! empty( $user->user_email ) ) $context['isp'] = ISPDetector::detect( $user->user_email );
+		}
+		$server = LoadBalancer::select_server( $template_slug, $context );
+		if ( ! $server ) $server = [ 'domain' => 'system.local' ];
+
+		// Prefix
+		$email_prefix = 'contact';
+		if ( ! empty( $tpl['mailto_email_prefix'] ) ) $email_prefix = $tpl['mailto_email_prefix'];
+		elseif ( preg_match( '/^[a-z0-9_.-]+$/i', $template_slug ) ) $email_prefix = $template_slug;
+
+		$email_to = $email_prefix . '@' . $server['domain'];
+
+		// Subject & Body
+		$raw_subject_pool = !empty($tpl['mailto_subject']) ? $tpl['mailto_subject'] : self::DEFAULT_SUBJECTS;
+		$raw_body_pool    = !empty($tpl['mailto_body'])    ? $tpl['mailto_body']    : self::DEFAULT_BODIES;
+
+		$subject = TemplateLoader::pick_weighted( $raw_subject_pool );
+		$body    = TemplateLoader::pick_weighted( $raw_body_pool );
+
+		// Spintax
+		if ( ! empty( $tpl['spintax_enabled'] ) ) {
+			$subject = TemplateEngine::process_spintax( $subject );
+			$body    = TemplateEngine::process_spintax( $body );
+		}
+
+		$subject = $this->process_variables( $subject );
+		$body    = $this->process_variables( $body );
+
+		$body_clean = wp_strip_all_tags( $body );
+		$body_clean = html_entity_decode( $body_clean, ENT_QUOTES, 'UTF-8' );
+
+		return 'mailto:' . sanitize_email( $email_to ) .
+		       '?subject=' . rawurlencode( $subject ) .
+		       '&body=' . rawurlencode( $body_clean );
+	}
+
+	public function ajax_get_mailto_url() {
+		check_ajax_referer( 'pw_rotate', 'nonce' );
+		$template = sanitize_key( $_POST['template'] ?? 'support' );
+		$url = $this->build_mailto_url( $template );
+		wp_send_json_success( [ 'url' => $url ] );
 	}
 
 	private function get_server_random( $force_domain = '' ) {

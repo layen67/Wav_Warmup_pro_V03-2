@@ -50,6 +50,20 @@
                     const params = parts.length > 1 ? '?' + parts[1] : '';
                     $link.attr('href', 'mailto:' + newEmail + params);
                 }
+            } else if ($link.data('rotate') === 'true') {
+                // Rotation AJAX complète (sujet + corps)
+                const template = $link.data('template');
+                const nonce = $link.data('nonce');
+
+                $.post(pwMailto.ajaxurl, {
+                    action: 'pw_get_mailto_url',
+                    nonce: nonce,
+                    template: template
+                }, function(res) {
+                    if (res.success && res.data.url) {
+                        $link.attr('href', res.data.url);
+                    }
+                });
             }
         });
 

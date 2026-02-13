@@ -680,7 +680,51 @@
         }, 
          
         initDragDrop() { 
-            // Simplified Drag & Drop for demo
+            const self = this;
+
+            // Drag Start
+            $(document).on('dragstart', '.pw-template-card', function(e) {
+                const card = $(this);
+                const id = card.data('template-id');
+                // Use standard dataTransfer
+                e.originalEvent.dataTransfer.setData('text/plain', id);
+                e.originalEvent.dataTransfer.effectAllowed = 'move';
+                card.addClass('pw-dragging');
+            });
+
+            $(document).on('dragend', '.pw-template-card', function(e) {
+                $(this).removeClass('pw-dragging');
+                $('.pw-folder-item').removeClass('pw-drag-over');
+            });
+
+            // Drag Over (Folders)
+            $(document).on('dragover', '.pw-folder-item', function(e) {
+                e.preventDefault();
+                e.originalEvent.dataTransfer.dropEffect = 'move';
+                $(this).addClass('pw-drag-over');
+            });
+
+            $(document).on('dragleave', '.pw-folder-item', function(e) {
+                $(this).removeClass('pw-drag-over');
+            });
+
+            // Drop
+            $(document).on('drop', '.pw-folder-item', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $(this).removeClass('pw-drag-over');
+
+                const templateId = e.originalEvent.dataTransfer.getData('text/plain');
+                const folderId = $(this).data('folder-id');
+
+                if (templateId && folderId !== undefined) {
+                    // Visual feedback immediately
+                    const $card = $(`.pw-template-card[data-template-id="${templateId}"]`);
+                    $card.fadeOut(200, function() {
+                        self.moveTemplate(templateId, folderId);
+                    });
+                }
+            });
         }, 
          
         renderTemplates() { 
@@ -770,6 +814,44 @@
             }
             
             $modal.show();
+
+            // Bind Toolbar Events (once)
+            this.bindToolbarEvents();
+        },
+
+        bindToolbarEvents() {
+            if (this._toolbarBound) return;
+            this._toolbarBound = true;
+
+            // Toolbar: Insert Variable
+            $(document).on('change', '.pw-var-select', function() {
+                const val = $(this).val();
+                if (val) {
+                    const $textarea = $(this).closest('.pw-variant-toolbar').next('.pw-variant-editor').find('textarea');
+                    TemplateEditor.insertAtCursor($textarea[0], val);
+                    $(this).val(''); // Reset
+                }
+            });
+
+            // Toolbar: Insert Spintax
+            $(document).on('click', '.pw-spintax-btn', function() {
+                const $textarea = $(this).closest('.pw-variant-toolbar').next('.pw-variant-editor').find('textarea');
+                TemplateEditor.insertAtCursor($textarea[0], '{ | }');
+            });
+        },
+
+        insertAtCursor(field, value) {
+            if (!field) return;
+            if (field.selectionStart || field.selectionStart === 0) {
+                var startPos = field.selectionStart;
+                var endPos = field.selectionEnd;
+                field.value = field.value.substring(0, startPos) + value + field.value.substring(endPos, field.value.length);
+                field.selectionStart = startPos + value.length;
+                field.selectionEnd = startPos + value.length;
+            } else {
+                field.value += value;
+            }
+            $(field).focus();
         },
 
         resetForm() {
@@ -888,32 +970,76 @@
      * Template Preview Logic
      */
     const TemplatePreview = {
+        currentTemplate: null,
+        currentTemplateName: null,
+
         open(templateName) {
             const $modal = $('#pw-template-preview-modal');
             $('#pw-preview-title').text('Aperçu : ' + templateName);
-            this.loadPreview(templateName);
+
+            this.currentTemplateName = templateName;
+            this.loadPreview();
+
             $modal.show();
+
+            // Bind context change
+            $('#pw-preview-context').off('change').on('change', () => {
+                this.renderCurrent();
+            });
         },
 
-        async loadPreview(name) {
-            // Simplified preview for demo
+        async loadPreview() {
             try {
                 const response = await $.post(pwAdmin.ajaxurl, {
                     action: 'pw_get_template',
                     nonce: pwAdmin.nonce,
-                    name: name
+                    name: this.currentTemplateName
                 });
                 if (response.success) {
-                    const tpl = response.data;
-                    $('#pw-preview-from').text(tpl.from_name[0] || '');
-                    $('#pw-preview-subject').text(tpl.subject[0] || '');
-                    
-                    const $iframe = $('#pw-preview-frame');
-                    const html = tpl.html[0] || tpl.text[0] || '';
-                    $iframe.contents().find('body').html(html);
+                    this.currentTemplate = response.data;
+                    this.renderCurrent();
                 }
             } catch (error) {
                 console.error('Preview error:', error);
+            }
+        },
+
+        async renderCurrent() {
+            if (!this.currentTemplate) return;
+
+            const contextType = $('#pw-preview-context').val();
+
+            // Pick first variants
+            const subjectRaw = this.currentTemplate.subject[0] || '';
+            const htmlRaw = this.currentTemplate.html[0] || this.currentTemplate.text[0] || '';
+            const fromRaw = this.currentTemplate.from_name[0] || '';
+
+            $('#pw-preview-subject').html('<i>Chargement...</i>');
+            $('#pw-preview-from').html('<i>Chargement...</i>');
+
+            // Parallel render
+            Promise.all([
+                this.apiRender(subjectRaw, contextType),
+                this.apiRender(fromRaw, contextType),
+                this.apiRender(htmlRaw, contextType)
+            ]).then(([subject, from, html]) => {
+                $('#pw-preview-subject').text(subject);
+                $('#pw-preview-from').text(from);
+                $('#pw-preview-frame').contents().find('body').html(html);
+            });
+        },
+
+        async apiRender(content, contextType) {
+            try {
+                const response = await $.post(pwAdmin.ajaxurl, {
+                    action: 'pw_render_preview',
+                    nonce: pwAdmin.nonce,
+                    content: content,
+                    context_type: contextType
+                });
+                return response.success ? response.data.rendered : content;
+            } catch (e) {
+                return content;
             }
         }
     };

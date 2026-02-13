@@ -220,12 +220,22 @@ if (!defined('ABSPATH')) exit;
     <div class="pw-variant-item" data-type="<%- type %>">
         <div class="pw-variant-toolbar">
             <div class="pw-toolbar-group">
+                <select class="pw-var-select" style="max-width: 120px;">
+                    <option value="">Variables...</option>
+                    <option value="{{prenom}}">Prénom</option>
+                    <option value="{{civilite}}">Civilité</option>
+                    <option value="{{email}}">Email</option>
+                    <option value="{{heure_fr}}">Heure</option>
+                    <option value="{{date}}">Date</option>
+                    <option value="{{ref}}">Réf</option>
+                </select>
+                <button type="button" class="pw-spintax-btn" title="Insérer Spintax { | }">Spintax</button>
+                <div style="width: 1px; background: #ddd; margin: 0 8px;"></div>
                 <button type="button" class="pw-toggle-btn active" data-mode="code">Code</button>
                 <button type="button" class="pw-toggle-btn" data-mode="preview">Preview</button>
             </div>
             <div class="pw-toolbar-group">
-                <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Convertir en Base64</button>
-                <button type="button" class="pw-base64-decode-btn" title="Décoder le contenu Base64">Décoder Base64</button>
+                <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Base64</button>
             </div>
         </div>
         <div class="pw-variant-editor">
@@ -264,6 +274,30 @@ if (!defined('ABSPATH')) exit;
     border-bottom-color: #fff;
     font-weight: 600;
 }
+.pw-var-select {
+    font-size: 11px;
+    height: 24px;
+    min-height: 24px;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    margin-right: 5px;
+    padding: 0 5px;
+    cursor: pointer;
+}
+.pw-spintax-btn {
+    padding: 0 8px;
+    font-size: 11px;
+    height: 24px;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    background: #f0f0f1;
+    cursor: pointer;
+    color: #1d2327;
+}
+.pw-spintax-btn:hover {
+    background: #fff;
+    border-color: #2271b1;
+}
 .pw-base64-btn {
     padding: 3px 10px;
     font-size: 10px;
@@ -275,19 +309,6 @@ if (!defined('ABSPATH')) exit;
 }
 .pw-base64-btn:hover {
     border-color: #2271b1;
-}
-.pw-base64-decode-btn {
-    padding: 3px 10px;
-    font-size: 10px;
-    border: 1px solid #c3c4c7;
-    border-radius: 3px;
-    background: #fff;
-    cursor: pointer;
-    color: #4f46e5;
-    margin-left: 5px;
-}
-.pw-base64-decode-btn:hover {
-    border-color: #4f46e5;
 }
 .pw-variant-preview {
     border: 1px solid #c3c4c7;

@@ -12,6 +12,11 @@ if (!defined('ABSPATH')) exit;
         <div class="pw-modal-header">
             <h2 id="pw-preview-title">Aperçu du Template</h2>
             <div class="pw-preview-actions">
+                <select id="pw-preview-context" class="pw-filter-select" style="margin-right: 5px;">
+                    <option value="male">👨 Homme</option>
+                    <option value="female">👩 Femme</option>
+                    <option value="company">🏢 Entreprise</option>
+                </select>
                 <select id="pw-preview-variant-select" class="pw-filter-select">
                     <!-- Variantes injectées en JS -->
                 </select>

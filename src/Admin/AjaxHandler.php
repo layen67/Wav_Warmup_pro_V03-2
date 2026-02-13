@@ -452,13 +452,52 @@ class AjaxHandler {
 		wp_send_json_success();
 	}
 
-	public function ajax_get_mailto_url() {
-		check_ajax_referer( 'pw_rotate', 'nonce' );
+	public function ajax_render_preview() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
 
-		$template = sanitize_key( $_POST['template'] ?? 'support' );
-		$mailto = new \PostalWarmup\Services\Mailto();
-		$url = $mailto->build_mailto_url( $template );
+		$content = isset( $_POST['content'] ) ? wp_unslash( $_POST['content'] ) : '';
+		$context_type = sanitize_key( $_POST['context_type'] ?? 'male' );
 
-		wp_send_json_success( [ 'url' => $url ] );
+		// Base context
+		$context = [
+			'email'        => 'jean.dupont@example.com',
+			'domain'       => 'example.com',
+			'local'        => 'jean.dupont',
+			'date'         => current_time( 'd/m/Y' ),
+			'time'         => current_time( 'H:i' ),
+			'heure_fr'     => current_time( 'H\hi' ),
+			'jour_semaine' => date_i18n( 'l' ),
+			'mois'         => date_i18n( 'F' ),
+			'civilite'     => ( (int) current_time( 'H' ) >= 18 || (int) current_time( 'H' ) < 5 ) ? 'Bonsoir' : 'Bonjour',
+			'ref'          => 'REF-' . strtoupper( substr( md5( uniqid() ), 0, 8 ) ),
+		];
+
+		// Context simulation
+		switch ( $context_type ) {
+			case 'female':
+				$context['email'] = 'marie.curie@example.com';
+				$context['local'] = 'marie.curie';
+				$context['prenom'] = 'Marie';
+				$context['prénom'] = 'Marie';
+				break;
+			case 'company':
+				$context['email'] = 'contact@societe.com';
+				$context['local'] = 'contact';
+				$context['prenom'] = 'L\'équipe';
+				$context['prénom'] = 'L\'équipe';
+				break;
+			case 'male':
+			default:
+				$context['email'] = 'jean.dupont@example.com';
+				$context['local'] = 'jean.dupont';
+				$context['prenom'] = 'Jean';
+				$context['prénom'] = 'Jean';
+				break;
+		}
+
+		$rendered = \PostalWarmup\Core\TemplateEngine::render_string( $content, $context );
+
+		wp_send_json_success( [ 'rendered' => $rendered ] );
 	}
 }

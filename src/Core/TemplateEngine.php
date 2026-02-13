@@ -46,12 +46,6 @@ class TemplateEngine {
 		$html      = self::maybe_decode( $html );
 		$from_name = self::maybe_decode( $from_name );
 
-		// 4b. Process Spintax
-		$subject   = self::process_spintax( $subject );
-		$text      = self::process_spintax( $text );
-		$html      = self::process_spintax( $html );
-		$from_name = self::process_spintax( $from_name );
-
 		// 5. Prepare Variables
 		$vars = [
 			'email'        => $to,
@@ -60,16 +54,20 @@ class TemplateEngine {
 			'date'         => current_time( 'd/m/Y' ),
 			'time'         => current_time( 'H:i' ),
 			// Natural Variables
+			'prenom'       => mb_convert_case( explode( '.', $prefix )[0], MB_CASE_TITLE, 'UTF-8' ),
 			'prénom'       => mb_convert_case( explode( '.', $prefix )[0], MB_CASE_TITLE, 'UTF-8' ),
 			'heure_fr'     => current_time( 'H\hi' ),
 			'jour_semaine' => date_i18n( 'l' ),
 			'mois'         => date_i18n( 'F' ),
+			'civilite'     => ( (int) current_time( 'H' ) >= 18 || (int) current_time( 'H' ) < 5 ) ? 'Bonsoir' : 'Bonjour',
+			'ref'          => 'REF-' . strtoupper( substr( md5( uniqid() ), 0, 8 ) ),
 		];
 
 		// 6. Apply Placeholders
-		$subject = self::apply_placeholders( $subject, $vars );
-		$text    = self::apply_placeholders( $text, $vars );
-		$html    = self::apply_placeholders( $html, $vars );
+		$subject   = self::render_string( $subject, $vars );
+		$text      = self::render_string( $text, $vars );
+		$html      = self::render_string( $html, $vars );
+		$from_name = self::render_string( $from_name, $vars );
 
 		// 7. Handle Reply-To
 		$reply_to = '';
@@ -77,7 +75,7 @@ class TemplateEngine {
 			$reply_to_raw = self::pick_random( $template['reply_to'] );
 			$reply_to_raw = self::maybe_decode( $reply_to_raw );
 			if ( ! empty( $reply_to_raw ) ) {
-				$reply_to = self::apply_placeholders( $reply_to_raw, $vars );
+				$reply_to = self::render_string( $reply_to_raw, $vars );
 			}
 		}
 
@@ -121,9 +119,30 @@ class TemplateEngine {
 		return $array[ array_rand( $array ) ];
 	}
 
+	/**
+	 * Render a string with variables and spintax processing.
+	 *
+	 * @param string $text The content to render.
+	 * @param array $context The variables to replace (e.g. ['prenom' => 'Jean']).
+	 * @return string Rendered content.
+	 */
+	public static function render_string( $text, $context = [] ) {
+		if ( ! is_string( $text ) || empty( $text ) ) return $text;
+
+		// 1. Process Spintax first (so vars can be inside spintax if needed, or vice-versa? usually spintax first)
+		$text = self::process_spintax( $text );
+
+		// 2. Apply Placeholders
+		$text = self::apply_placeholders( $text, $context );
+
+		return $text;
+	}
+
 	public static function apply_placeholders( $text, $vars ) {
 		foreach ( $vars as $key => $value ) {
+			// Handle simple variables {{key}}
 			$text = str_replace( "{{{$key}}}", $value, $text );
+			// Handle capitalized variables {{Key}} ? No, stick to simple for now.
 		}
 		return $text;
 	}

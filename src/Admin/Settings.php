@@ -23,6 +23,9 @@ class Settings {
 
 		register_setting( 'postal-warmup-settings', 'pw_queue_retention_days', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 7 ) );
 		add_settings_field( 'pw_queue_retention_days', __( 'Rétention de la file d\'attente (jours)', 'postal-warmup' ), array( $this, 'queue_retention_field' ), 'postal-warmup-settings', 'pw_logs_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_stats_retention_days', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 90 ) );
+		add_settings_field( 'pw_stats_retention_days', __( 'Rétention des statistiques (jours)', 'postal-warmup' ), array( $this, 'stats_retention_field' ), 'postal-warmup-settings', 'pw_logs_section' );
 		
 		// === Section Statistiques ===
 		add_settings_section( 'pw_stats_section', __( 'Statistiques', 'postal-warmup' ), array( $this, 'stats_section_callback' ), 'postal-warmup-settings' );
@@ -42,6 +45,21 @@ class Settings {
 		add_settings_section( 'pw_notifications_section', __( 'Notifications', 'postal-warmup' ), array( $this, 'notifications_section_callback' ), 'postal-warmup-settings' );
 		register_setting( 'postal-warmup-settings', 'pw_notification_email', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_email', 'default' => get_option( 'admin_email' ) ) );
 		add_settings_field( 'pw_notification_email', __( 'Email de notification', 'postal-warmup' ), array( $this, 'notification_email_field' ), 'postal-warmup-settings', 'pw_notifications_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_notify_on_error', array( 'type' => 'boolean', 'default' => true ) );
+		add_settings_field( 'pw_notify_on_error', __( 'Alerter sur erreur', 'postal-warmup' ), array( $this, 'notify_on_error_field' ), 'postal-warmup-settings', 'pw_notifications_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_daily_report', array( 'type' => 'boolean', 'default' => false ) );
+		add_settings_field( 'pw_daily_report', __( 'Rapport quotidien', 'postal-warmup' ), array( $this, 'daily_report_field' ), 'postal-warmup-settings', 'pw_notifications_section' );
+
+		// === Section Performance & Advisor ===
+		add_settings_section( 'pw_performance_section', __( 'Performance & Advisor', 'postal-warmup' ), array( $this, 'performance_section_callback' ), 'postal-warmup-settings' );
+
+		register_setting( 'postal-warmup-settings', 'pw_queue_batch_size', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 20 ) );
+		add_settings_field( 'pw_queue_batch_size', __( 'Taille du lot (Queue)', 'postal-warmup' ), array( $this, 'queue_batch_size_field' ), 'postal-warmup-settings', 'pw_performance_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_advisor_enabled', array( 'type' => 'boolean', 'default' => true ) );
+		add_settings_field( 'pw_advisor_enabled', __( 'Activer l\'Advisor', 'postal-warmup' ), array( $this, 'advisor_enabled_field' ), 'postal-warmup-settings', 'pw_performance_section' );
 	}
 
 	public function general_section_callback() { echo '<p>' . __( 'Configuration générale des envois.', 'postal-warmup' ) . '</p>'; }
@@ -62,6 +80,7 @@ class Settings {
 	public function stats_section_callback() { echo '<p>' . __( 'Configuration des statistiques.', 'postal-warmup' ) . '</p>'; }
 	public function limits_section_callback() { echo '<p>' . __( 'Définissez des limites pour éviter l\'abus.', 'postal-warmup' ) . '</p>'; }
 	public function notifications_section_callback() { echo '<p>' . __( 'Configuration des alertes email.', 'postal-warmup' ) . '</p>'; }
+	public function performance_section_callback() { echo '<p>' . __( 'Optimisation des performances et surveillance.', 'postal-warmup' ) . '</p>'; }
 
 	public function enable_logging_field() {
 		$enabled = get_option( 'pw_enable_logging', true );
@@ -88,6 +107,10 @@ class Settings {
 		$value = get_option( 'pw_queue_retention_days', 7 );
 		echo '<input type="number" name="pw_queue_retention_days" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( 'jours (Messages envoyés/échoués uniquement)', 'postal-warmup' );
 	}
+	public function stats_retention_field() {
+		$value = get_option( 'pw_stats_retention_days', 90 );
+		echo '<input type="number" name="pw_stats_retention_days" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( 'jours', 'postal-warmup' );
+	}
 	public function stats_enabled_field() {
 		$value = get_option( 'pw_stats_enabled', true );
 		echo '<input type="checkbox" name="pw_stats_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Activer', 'postal-warmup' );
@@ -107,5 +130,21 @@ class Settings {
 	public function notification_email_field() {
 		$value = get_option( 'pw_notification_email', get_option( 'admin_email' ) );
 		echo '<input type="email" name="pw_notification_email" value="' . esc_attr( $value ) . '" class="regular-text">';
+	}
+	public function notify_on_error_field() {
+		$value = get_option( 'pw_notify_on_error', true );
+		echo '<label><input type="checkbox" name="pw_notify_on_error" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Recevoir une notification en cas d\'erreur critique', 'postal-warmup' ) . '</label>';
+	}
+	public function daily_report_field() {
+		$value = get_option( 'pw_daily_report', false );
+		echo '<label><input type="checkbox" name="pw_daily_report" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Recevoir un rapport quotidien des envois', 'postal-warmup' ) . '</label>';
+	}
+	public function queue_batch_size_field() {
+		$value = get_option( 'pw_queue_batch_size', 20 );
+		echo '<input type="number" name="pw_queue_batch_size" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( 'emails par minute (défaut: 20)', 'postal-warmup' );
+	}
+	public function advisor_enabled_field() {
+		$value = get_option( 'pw_advisor_enabled', true );
+		echo '<label><input type="checkbox" name="pw_advisor_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Activer l\'analyse automatique (Conseiller Warmup)', 'postal-warmup' ) . '</label>';
 	}
 }

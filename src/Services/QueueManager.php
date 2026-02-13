@@ -67,9 +67,11 @@ class QueueManager {
         // 2. Fetch Pending Items
         $now_mysql = current_time( 'mysql' );
         // Process in batches
+        $batch_size = (int) get_option( 'pw_queue_batch_size', 20 );
         $items = $wpdb->get_results( $wpdb->prepare( 
-            "SELECT * FROM $table WHERE status = 'pending' AND scheduled_at <= %s LIMIT 20", 
-            $now_mysql 
+            "SELECT * FROM $table WHERE status = 'pending' AND scheduled_at <= %s LIMIT %d",
+            $now_mysql,
+            $batch_size
         ), ARRAY_A );
         
         if ( empty( $items ) ) return;

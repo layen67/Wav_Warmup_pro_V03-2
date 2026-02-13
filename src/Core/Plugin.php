@@ -126,9 +126,18 @@ class Plugin {
 		}
 
 		// Advisor Check (Hourly)
-		$this->loader->add_action( 'pw_advisor_check', 'PostalWarmup\Services\WarmupAdvisor', 'run' );
-		if ( ! wp_next_scheduled( 'pw_advisor_check' ) ) {
-			wp_schedule_event( time(), 'hourly', 'pw_advisor_check' );
+		// Check global option before hooking
+		if ( get_option( 'pw_advisor_enabled', true ) ) {
+			$this->loader->add_action( 'pw_advisor_check', 'PostalWarmup\Services\WarmupAdvisor', 'run' );
+			if ( ! wp_next_scheduled( 'pw_advisor_check' ) ) {
+				wp_schedule_event( time(), 'hourly', 'pw_advisor_check' );
+			}
+		} else {
+			// Clean up if disabled
+			$timestamp = wp_next_scheduled( 'pw_advisor_check' );
+			if ( $timestamp ) {
+				wp_unschedule_event( $timestamp, 'pw_advisor_check' );
+			}
 		}
 
 		// Self-healing: Ensure daily report is scheduled if missing (Fix for existing installations)

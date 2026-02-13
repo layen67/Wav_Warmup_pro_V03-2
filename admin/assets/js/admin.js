@@ -186,6 +186,42 @@
             });
         });
 
+        // --- DOMSCAN AUDIT ---
+        $(document).on('click', '.pw-domscan-btn', function(e) {
+            e.preventDefault();
+            const $btn = $(this);
+            const domain = $btn.data('domain');
+            const $cell = $btn.parent();
+
+            $btn.prop('disabled', true).text('Scan...');
+
+            $.post(pwAdmin.ajaxurl, {
+                action: 'pw_run_domscan_audit',
+                nonce: pwAdmin.nonce,
+                domain: domain
+            })
+            .done(function(res) {
+                if (res.success && res.data.data) {
+                    const audit = res.data.data;
+                    const blacklist = audit.blacklist_count || 0;
+                    const trust = audit.reputation_score || '?';
+                    const color = (blacklist > 0) ? '#dc3232' : '#46b450';
+
+                    let html = `<span class='pw-badge' style='background-color:${color}'>BL: ${blacklist}</span>`;
+                    html += `<br><small>Trust: ${trust}/100</small>`;
+
+                    $cell.html(html);
+                } else {
+                    alert(res.data.message || 'Erreur lors de l\'audit');
+                    $btn.prop('disabled', false).text('Réessayer');
+                }
+            })
+            .fail(function() {
+                alert('Erreur réseau');
+                $btn.prop('disabled', false).text('Réessayer');
+            });
+        });
+
         // --- DASHBOARD REALTIME ---
         let activityChart = null;
 

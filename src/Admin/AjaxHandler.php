@@ -77,16 +77,19 @@ class AjaxHandler {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
 		
+		// Fix: Unslash POST data before processing to prevent backslash accumulation
+		$variants = isset($_POST['variants']) ? wp_unslash($_POST['variants']) : [];
+
 		$name = sanitize_text_field( $_POST['name'] ?? '' );
 		$data = [
-			'subject'   => array_map( 'sanitize_text_field', $_POST['variants']['subject'] ?? [] ),
-			'text'      => array_map( 'sanitize_textarea_field', $_POST['variants']['text'] ?? [] ),
+			'subject'   => array_map( 'sanitize_text_field', $variants['subject'] ?? [] ),
+			'text'      => array_map( 'sanitize_textarea_field', $variants['text'] ?? [] ),
 			// Fix HTML preservation: Use stripslashes to handle magic quotes but avoid wp_kses/sanitize to keep raw HTML intact
-			'html'      => array_map( 'stripslashes', $_POST['variants']['html'] ?? [] ),
-			'from_name' => array_map( 'sanitize_text_field', $_POST['variants']['from_name'] ?? [] ),
-			'mailto_subject'   => array_map( 'sanitize_text_field', $_POST['variants']['mailto_subject'] ?? [] ),
-			'mailto_body'      => array_map( 'sanitize_textarea_field', $_POST['variants']['mailto_body'] ?? [] ),
-			'mailto_from_name' => array_map( 'sanitize_text_field', $_POST['variants']['mailto_from_name'] ?? [] ),
+			'html'      => $variants['html'] ?? [], // Already unslashed
+			'from_name' => array_map( 'sanitize_text_field', $variants['from_name'] ?? [] ),
+			'mailto_subject'   => array_map( 'sanitize_text_field', $variants['mailto_subject'] ?? [] ),
+			'mailto_body'      => array_map( 'sanitize_textarea_field', $variants['mailto_body'] ?? [] ),
+			'mailto_from_name' => array_map( 'sanitize_text_field', $variants['mailto_from_name'] ?? [] ),
 			'default_label' => sanitize_text_field( $_POST['default_label'] ?? '' ),
 		];
 		$meta = [

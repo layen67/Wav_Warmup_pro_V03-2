@@ -150,9 +150,13 @@ class Mailto {
 			$body = TemplateLoader::pick_weighted( $raw_body_pool );
 		}
 
-		// 5. Processing (Spintax -> Vars -> Encoding)
+		// 5. Cleanup DB corruption (Backslashes)
+		$subject = $this->clean_content( $subject );
+		$body    = $this->clean_content( $body );
+
+		// 6. Processing (Spintax -> Vars -> Encoding)
 		$use_spintax = ( $atts['spintax'] === 'true' )
-			|| ( $atts['spintax'] === 'auto' && ! empty( $tpl['spintax_enabled'] ) );
+			|| ( $atts['spintax'] === 'auto' && ( ! empty( $tpl['spintax_enabled'] ) || strpos( $subject . $body, '{' ) !== false ) );
 
 		if ( $use_spintax ) {
 			$subject = TemplateEngine::process_spintax( $subject );
@@ -246,8 +250,12 @@ class Mailto {
 		$subject = TemplateLoader::pick_weighted( $raw_subject_pool );
 		$body    = TemplateLoader::pick_weighted( $raw_body_pool );
 
+		// Cleanup
+		$subject = $this->clean_content( $subject );
+		$body    = $this->clean_content( $body );
+
 		// Spintax
-		if ( ! empty( $tpl['spintax_enabled'] ) ) {
+		if ( ! empty( $tpl['spintax_enabled'] ) || strpos( $subject . $body, '{' ) !== false ) {
 			$subject = TemplateEngine::process_spintax( $subject );
 			$body    = TemplateEngine::process_spintax( $body );
 		}
@@ -316,15 +324,36 @@ class Mailto {
 			$variables['{{user_firstname}}'] = $user->first_name;
 			$variables['{{user_lastname}}'] = $user->last_name;
 			$variables['{{prénom}}'] = $user->first_name; // Alias
+			$variables['{{prenom}}'] = $user->first_name; // Alias sans accent
 		} else {
 			$variables['{{user_name}}'] = '';
 			$variables['{{user_email}}'] = '';
 			$variables['{{user_firstname}}'] = '';
 			$variables['{{user_lastname}}'] = '';
 			$variables['{{prénom}}'] = '';
+			$variables['{{prenom}}'] = '';
 		}
 
 		return str_replace( array_keys( $variables ), array_values( $variables ), $text );
+	}
+
+	/**
+	 * Nettoie le contenu (strip slashes récursif pour réparer les données corrompues)
+	 */
+	private function clean_content( $text ) {
+		if ( empty( $text ) ) return $text;
+
+		// Unslash jusqu'à ce que ce soit propre (max 5 niveaux pour éviter boucle infinie)
+		// Utile si les données ont été sauvegardées plusieurs fois avec des slashes
+		$limit = 5;
+		while ( strpos( $text, '\\' ) !== false && $limit > 0 ) {
+			$original = $text;
+			$text = wp_unslash( $text );
+			if ( $original === $text ) break; // Plus rien à nettoyer
+			$limit--;
+		}
+
+		return $text;
 	}
 
 	private function generate_html( $mailto_url, $atts, $server ) {

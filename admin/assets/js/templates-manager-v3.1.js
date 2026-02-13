@@ -849,21 +849,65 @@
                 });
             });
 
-            // Toolbar: Insert Variable
-            $(document).on('change', '.pw-var-select', function(e) {
+            // Toolbar: Insert Variable (Modified to NOT insert on change if using Copy button workflow)
+            // But user asked for copy capability. Does he want ONLY copy or BOTH?
+            // "je puisse copier les variable dans le presse papier" implies copy.
+            // The previous logic was "insert on change". This is conflicting if "change" triggers insert immediately.
+            // Let's change behavior: "change" -> Selects value but doesn't insert automatically if we want to copy?
+            // Or better: keep insert on change for convenience, but the copy button grabs the value BEFORE reset?
+            // Ah, the reset `$(this).val('')` clears it.
+            // Correction: Remove auto-insert on change. User selects, then clicks Insert or Copy.
+            // OR: Keep auto-insert but remove the reset?
+            // Most standard editors: Select from list -> Inserts immediately.
+            // To support Copy: We need a way to select without inserting.
+
+            // New Logic:
+            // 1. Change event: Does NOTHING but update internal state or just stay selected?
+            // If I remove auto-insert, existing users might be confused.
+            // Let's change the UI slightly:
+            // [ Select Variable ] [ Insert ] [ Copy ] ? Too cluttered.
+            // Current: [ Select (Change triggers insert) ] [ Copy ]
+            // If I click Copy, I haven't changed the select yet.
+            // So: User selects a variable. It stays selected. User can click "Copy". User can click "Insert" (we need an insert button?)
+
+            // Let's add an explicit "Insert" button to avoid accidental insertions and allow copying.
+
+            // Toolbar: Insert Variable Button
+            $(document).on('click', '.pw-insert-var-btn', function(e) {
                 e.preventDefault();
-                const val = $(this).val();
-                if (val) {
-                    // Fix: Target the specific textarea within the same variant item using robust selector
+                const $select = $(this).siblings('.pw-var-select');
+                const val = $select.val();
+                 if (val) {
                     const $container = $(this).closest('.pw-variant-item');
                     const $textarea = $container.find('textarea.pw-variant-input');
-
                     if ($textarea.length) {
                         TemplateEditor.insertAtCursor($textarea[0], val);
-                    } else {
-                        console.error('Textarea not found for variable insertion');
                     }
-                    $(this).val(''); // Reset
+                }
+            });
+
+            // Toolbar: Copy Variable
+            $(document).on('click', '.pw-copy-var-btn', function(e) {
+                e.preventDefault();
+                // The select is sibling
+                const $select = $(this).siblings('.pw-var-select');
+                const val = $select.val();
+
+                if (val) {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(val);
+                    } else {
+                        const $temp = $('<textarea>').val(val).appendTo('body').select();
+                        document.execCommand('copy');
+                        $temp.remove();
+                    }
+
+                    const $btn = $(this);
+                    const originalHtml = $btn.html();
+                    $btn.html('<span class="dashicons dashicons-yes" style="font-size:14px; width:14px; height:14px; margin-top:3px; color:green;"></span>');
+                    setTimeout(() => $btn.html(originalHtml), 1500);
+                } else {
+                    alert('Sélectionnez une variable d\'abord.');
                 }
             });
 

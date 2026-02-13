@@ -61,6 +61,11 @@ class TemplateEngine {
 			'mois'         => date_i18n( 'F' ),
 			'civilite'     => ( (int) current_time( 'H' ) >= 18 || (int) current_time( 'H' ) < 5 ) ? 'Bonsoir' : 'Bonjour',
 			'ref'          => 'REF-' . strtoupper( substr( md5( uniqid() ), 0, 8 ) ),
+			'site_url'     => get_site_url(),
+			'site_name'    => get_bloginfo( 'name' ),
+			'admin_email'  => get_option( 'admin_email' ),
+			'user_ip'      => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+			'user_agent'   => $_SERVER['HTTP_USER_AGENT'] ?? 'Mozilla/5.0',
 		];
 
 		// 6. Apply Placeholders

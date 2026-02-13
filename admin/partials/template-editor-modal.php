@@ -228,7 +228,13 @@ if (!defined('ABSPATH')) exit;
                     <option value="{{heure_fr}}">Heure</option>
                     <option value="{{date}}">Date</option>
                     <option value="{{ref}}">Réf</option>
+                    <option value="{{site_url}}">Site URL</option>
+                    <option value="{{site_name}}">Site Name</option>
+                    <option value="{{admin_email}}">Admin Email</option>
                 </select>
+                <button type="button" class="pw-insert-var-btn" title="Insérer à la position du curseur" style="margin-right:2px;"><span class="dashicons dashicons-plus-alt2" style="font-size:14px; width:14px; height:14px; margin-top:3px;"></span></button>
+                <button type="button" class="pw-copy-var-btn" title="Copier dans le presse-papier"><span class="dashicons dashicons-clipboard" style="font-size:14px; width:14px; height:14px; margin-top:3px;"></span></button>
+                <div style="width: 1px; background: #ddd; margin: 0 5px;"></div>
                 <button type="button" class="pw-spintax-btn" title="Insérer Spintax { | }">Spintax</button>
                 <div style="width: 1px; background: #ddd; margin: 0 8px;"></div>
                 <button type="button" class="pw-toggle-btn active" data-mode="code">Code</button>
@@ -308,6 +314,19 @@ if (!defined('ABSPATH')) exit;
 .pw-spintax-btn:hover {
     background: #fff;
     border-color: #2271b1;
+}
+.pw-insert-var-btn, .pw-copy-var-btn {
+    padding: 0 5px;
+    height: 24px;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    color: #2271b1;
+}
+.pw-insert-var-btn:hover, .pw-copy-var-btn:hover {
+    border-color: #2271b1;
+    background: #f0f0f1;
 }
 .pw-base64-btn {
     padding: 3px 10px;

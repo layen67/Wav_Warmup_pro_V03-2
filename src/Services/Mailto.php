@@ -10,6 +10,8 @@ use PostalWarmup\Core\TemplateEngine;
 
 class Mailto {
 
+	private static $template_cache = [];
+
 	public function init() {
 		add_shortcode( 'postal_warmup', array( $this, 'render_shortcode' ) );
 		add_shortcode( 'warmup_mailto', array( $this, 'render_shortcode' ) );
@@ -38,87 +40,115 @@ class Mailto {
 			'track'    => 'true', // Enable click tracking
 			'display'  => 'button', // link, button, badge
 			'preset'   => 'primary', // primary, success, danger, warning, minimal, gradient
-			'server'   => '' // Force a specific server domain
+			'server'   => '', // Force a specific server domain
+			'prefix'   => '', // Override local part of email
+			'emails'   => '', // Comma-separated list of prefixes
+			'subjects' => '', // Inline subject variants (semicolon separated)
+			'rotate'   => 'false', // Enable JS rotation on hover
 		), $atts, 'postal_warmup' );
 
-		// Load template
-		$template_data = TemplateLoader::load( $atts['template'] );
-		
-		if ( ! $template_data ) {
-			// Fallback to system default if specific template is missing
-			$template_data = TemplateLoader::get_fallback();
+		// 1. Load Template (with Cache)
+		$template_key = $atts['template'];
+		if ( isset( self::$template_cache[ $template_key ] ) ) {
+			$template_data = self::$template_cache[ $template_key ];
+		} else {
+			$template_data = TemplateLoader::load( $template_key );
+			if ( ! $template_data ) {
+				$template_data = TemplateLoader::get_fallback();
+			}
+			self::$template_cache[ $template_key ] = $template_data;
 		}
 
-		if ( ! $template_data ) {
-			return '<!-- Postal Warmup: Template not found -->';
-		}
+		if ( ! $template_data ) return '<!-- Postal Warmup: Template not found -->';
 
-		// Select Server (Load Balancer)
-		// Mode "Display" : On ignore les limites pour toujours afficher le lien
+		// 2. Select Server (Load Balancer)
 		$server = null;
 		if ( ! empty( $atts['server'] ) ) {
 			$server = Database::get_server_by_domain( $atts['server'] );
 		} else {
-			// V3 LoadBalancer: Context includes logged-in user ISP if available
 			$context = [ 'ignore_limits' => true ];
-			
 			if ( is_user_logged_in() ) {
 				$user = wp_get_current_user();
 				if ( ! empty( $user->user_email ) ) {
-					// Detect ISP to optimize server selection based on quota/reputation for this ISP
 					$context['isp'] = ISPDetector::detect( $user->user_email );
 				}
 			}
-
 			$server = LoadBalancer::select_server( $atts['template'], $context );
 		}
 		
-		// Fallback Système si aucun serveur actif
 		if ( ! $server ) {
-			$server = [
-				'id' => 0,
-				'domain' => 'system.local',
-				'metrics' => [ 'usage_today' => 0, 'limit' => 0 ]
-			];
+			$server = [ 'id' => 0, 'domain' => 'system.local', 'metrics' => [ 'usage_today' => 0, 'limit' => 0 ] ];
 		}
 
-		// Prepare mailto parts
+		// 3. Prepare Email Address (Prefix Logic)
 		$email_prefix = 'contact';
-		// Use template name as email prefix if it's a valid simple slug (e.g. "support", "billing") and not a complex ID
-		if ( ! empty( $atts['template'] ) && preg_match( '/^[a-z0-9_.-]+$/i', $atts['template'] ) && $atts['template'] !== 'null' ) {
+
+		// Priority 1: 'prefix' param
+		if ( ! empty( $atts['prefix'] ) ) {
+			$email_prefix = $atts['prefix'];
+		}
+		// Priority 2: 'emails' param (random selection)
+		elseif ( ! empty( $atts['emails'] ) ) {
+			$prefixes = array_map( 'trim', explode( ',', $atts['emails'] ) );
+			$email_prefix = $prefixes[ array_rand( $prefixes ) ];
+		}
+		// Priority 3: Template name (if simple slug)
+		elseif ( ! empty( $atts['template'] ) && preg_match( '/^[a-z0-9_.-]+$/i', $atts['template'] ) && $atts['template'] !== 'null' ) {
 			$email_prefix = $atts['template'];
 		}
-		
+
 		$email_to = ! empty( $atts['email'] ) ? $atts['email'] : $email_prefix . '@' . $server['domain'];
-		$subject = ! empty( $atts['subject'] ) ? $atts['subject'] : TemplateLoader::pick_random( $template_data['mailto_subject'] ?? $template_data['subject'] );
-		$body = ! empty( $atts['body'] ) ? $atts['body'] : TemplateLoader::pick_random( $template_data['mailto_body'] ?? $template_data['text'] );
 
-		// Process Spintax
-		$subject = TemplateEngine::process_spintax( $subject );
-		$body = TemplateEngine::process_spintax( $body );
+		// 4. Prepare Subject & Body
+		// Subject Priority: Shortcode 'subject' > Shortcode 'subjects' (random) > Template 'mailto_subject' > Template 'subject'
+		$raw_subject = '';
+		if ( ! empty( $atts['subject'] ) ) {
+			$raw_subject = $atts['subject'];
+		} elseif ( ! empty( $atts['subjects'] ) ) {
+			$subjects_list = array_map( 'trim', explode( ';', $atts['subjects'] ) );
+			$raw_subject = $subjects_list[ array_rand( $subjects_list ) ];
+		} else {
+			// Neutral Fallback: Use mailto_subject if available, else standard subject
+			$pool = ! empty( $template_data['mailto_subject'] ) ? $template_data['mailto_subject'] : ( $template_data['subject'] ?? [] );
+			$raw_subject = TemplateLoader::pick_random( $pool );
+		}
 
-		// Process variables
+		// Body Priority: Shortcode 'body' > Template 'mailto_body' > Template 'text'
+		$raw_body = '';
+		if ( ! empty( $atts['body'] ) ) {
+			$raw_body = $atts['body'];
+		} else {
+			$pool = ! empty( $template_data['mailto_body'] ) ? $template_data['mailto_body'] : ( $template_data['text'] ?? [] );
+			$raw_body = TemplateLoader::pick_random( $pool );
+		}
+
+		// 5. Processing (Spintax -> Vars -> Encoding)
+		$subject = TemplateEngine::process_spintax( $raw_subject );
+		$body    = TemplateEngine::process_spintax( $raw_body );
+
 		$subject = $this->process_variables( $subject );
-		$body = $this->process_variables( $body );
+		$body    = $this->process_variables( $body );
 
-		// Build URL (Ensure Return-Path is implicitly set by the domain we use)
-		// Note: 'return-path' query param is NOT standard mailto, but some clients might use it.
-		// The real return-path is set by the sending server (Postal) when we send via API.
-		// However, the prompt asks: "Le mailto doit intégrer le Return-Path correct pour le serveur choisi"
-		// Maybe as a custom param for tracking or just ensuring the "To" domain is correct?
-		// We already set $email_to using $server['domain'].
+		// Fix Encoding: Normalize newlines to CRLF before encoding
+		$body = str_replace( array( "\r\n", "\r", "\n" ), "\r\n", $body );
 		
-		$mailto_url = 'mailto:' . sanitize_email( $email_to ) . '?subject=' . rawurlencode( $subject ) . '&body=' . rawurlencode( $body );
+		$mailto_url = 'mailto:' . sanitize_email( $email_to ) .
+		              '?subject=' . rawurlencode( $subject ) .
+		              '&body=' . rawurlencode( $body );
 
-		// Priority 1: Template Default Label (Overrides content and attribute if set)
+		// 6. Label Logic
 		if ( ! empty( $template_data['default_label'] ) ) {
 			$atts['label'] = $template_data['default_label'];
-		} 
-		// Priority 2: Shortcode Content (if no template label)
-		elseif ( ! empty( $content ) ) {
+		} elseif ( ! empty( $content ) ) {
 			$atts['label'] = do_shortcode( $content );
 		}
-		// Priority 3: Default Attribute ('Nous contacter') - already set via shortcode_atts
+
+		// 7. Rotation Data
+		if ( $atts['rotate'] === 'true' && ! empty( $atts['emails'] ) ) {
+			// Pass variants to JS
+			$atts['data-rotate-emails'] = $atts['emails']; // raw list
+			$atts['data-server-domain'] = $server['domain'];
+		}
 
 		return $this->generate_html( $mailto_url, $atts, $server );
 	}
@@ -158,6 +188,8 @@ class Mailto {
 			'{{heure_fr}}'     => current_time( 'H\hi' ),
 			'{{jour_semaine}}' => date_i18n( 'l' ),
 			'{{mois}}'         => date_i18n( 'F' ),
+			'{{civilite}}'     => ( (int) current_time( 'H' ) >= 5 && (int) current_time( 'H' ) < 18 ) ? 'Bonjour' : 'Bonsoir',
+			'{{ref}}'          => strtoupper( wp_generate_password( 8, false ) ),
 		];
 
 		if ( is_user_logged_in() ) {
@@ -226,6 +258,14 @@ class Mailto {
 				'data-track="true" data-template="%s" data-server="%s"',
 				esc_attr( $atts['template'] ),
 				esc_attr( $server['domain'] )
+			);
+		}
+
+		if ( isset( $atts['data-rotate-emails'] ) ) {
+			$data_attrs .= sprintf(
+				' data-rotate="true" data-rotate-emails="%s" data-server-domain="%s"',
+				esc_attr( $atts['data-rotate-emails'] ),
+				esc_attr( $atts['data-server-domain'] )
 			);
 		}
 		

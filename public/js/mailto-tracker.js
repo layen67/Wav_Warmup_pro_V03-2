@@ -26,6 +26,27 @@
             // Le clic continue normalement (ouvre le client mail)
         });
         
+        // Rotation des emails au survol
+        $('.pw-mailto-link[data-rotate="true"]').on('mouseenter', function() {
+            const $link = $(this);
+            const emails = $link.data('rotate-emails');
+            const domain = $link.data('server-domain');
+
+            if (emails && domain) {
+                const prefixList = emails.split(',');
+                const randomPrefix = prefixList[Math.floor(Math.random() * prefixList.length)].trim();
+                const newEmail = randomPrefix + '@' + domain;
+
+                // Mettre à jour le href en conservant les params (subject, body)
+                const currentHref = $link.attr('href');
+                if (currentHref.indexOf('mailto:') === 0) {
+                    const parts = currentHref.split('?');
+                    const params = parts.length > 1 ? '?' + parts[1] : '';
+                    $link.attr('href', 'mailto:' + newEmail + params);
+                }
+            }
+        });
+
     });
     
 })(jQuery);

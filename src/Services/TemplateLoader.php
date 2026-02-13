@@ -71,6 +71,36 @@ class TemplateLoader {
 
 	public static function pick_random( $array ) {
 		if ( ! is_array( $array ) || empty( $array ) ) return '';
+
+		// Check for weighted arrays: ['text', weight]
+		$weighted = false;
+		$total_weight = 0;
+		$items = [];
+
+		foreach ( $array as $item ) {
+			if ( is_array( $item ) && count( $item ) === 2 && is_numeric( $item[1] ) ) {
+				$weighted = true;
+				$items[] = [ 'value' => $item[0], 'weight' => (int) $item[1] ];
+				$total_weight += (int) $item[1];
+			} else {
+				// Treat simple strings as weight 1
+				$items[] = [ 'value' => $item, 'weight' => 1 ];
+				$total_weight += 1;
+			}
+		}
+
+		if ( $weighted && $total_weight > 0 ) {
+			$rand = mt_rand( 1, $total_weight );
+			$current = 0;
+			foreach ( $items as $item ) {
+				$current += $item['weight'];
+				if ( $rand <= $current ) {
+					return $item['value'];
+				}
+			}
+		}
+
+		// Fallback to simple random
 		return $array[ array_rand( $array ) ];
 	}
 

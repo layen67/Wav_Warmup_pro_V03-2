@@ -75,7 +75,7 @@ class Admin {
 		wp_enqueue_script( 'pw-admin', PW_PLUGIN_URL . 'admin/assets/js/admin.js', [ 'jquery', 'pw-chartjs' ], $script_version, true );
 		
 		if ( strpos( $hook, 'postal-warmup-templates' ) !== false || $hook === 'toplevel_page_postal-warmup' ) {
-			wp_enqueue_script( 'pw-templates', PW_PLUGIN_URL . 'admin/assets/js/templates-manager.js', [ 'jquery', 'pw-admin' ], $script_version, true );
+			wp_enqueue_script( 'pw-templates', PW_PLUGIN_URL . 'admin/assets/js/templates-manager-v3.1.js', [ 'jquery', 'pw-admin' ], $script_version, true );
 		}
 
 		if ( strpos( $hook, 'postal-warmup-strategies' ) !== false ) {

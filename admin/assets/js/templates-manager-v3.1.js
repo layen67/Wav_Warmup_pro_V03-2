@@ -883,6 +883,9 @@
                     if ($textarea.length) {
                         TemplateEditor.insertAtCursor($textarea[0], val);
                     }
+                } else {
+                    alert('Veuillez d\'abord sélectionner une variable dans la liste.');
+                    $select.focus();
                 }
             });
 

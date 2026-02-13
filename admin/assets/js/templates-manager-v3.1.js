@@ -1027,6 +1027,10 @@
                         $('#pw-editor-tags').val(tagNames);
                     }
 
+                    // Load Default Label and Timezone (Fix)
+                    $('#pw-editor-default-label').val(tpl.default_label || '');
+                    $('#pw-editor-timezone').val(tpl.timezone || '');
+
                     // Load variants
                     const variantTypes = ['subject', 'text', 'html', 'from_name', 'mailto_subject', 'mailto_body', 'mailto_from_name'];
                     variantTypes.forEach(type => {
@@ -1267,6 +1271,74 @@
                 TemplateEditor.save();
             });
             $('#pw-save-category-btn').on('click', () => CategoryManager.save());
+
+            // --- IMPORT / EXPORT LOGIC ---
+
+            // Export
+            $(document).on('click', '.pw-export-btn', function(e) {
+                e.preventDefault();
+                const $card = $(this).closest('.pw-template-card');
+                const name = $card.data('template-name');
+                if (!name) return;
+
+                // Trigger download via iframe or direct location
+                // We use a hidden form to POST if needed, but here simple GET or POST with location is enough if not too large.
+                // Actually, AJAX download is tricky. Best is to open new tab or location.href with query params if GET.
+                // But our AjaxHandler expects POST for 'pw_export_template'.
+                // So we create a form dynamically.
+
+                const $form = $('<form action="' + pwAdmin.ajaxurl + '" method="post" target="_blank">' +
+                    '<input type="hidden" name="action" value="pw_export_template">' +
+                    '<input type="hidden" name="nonce" value="' + pwAdmin.nonce + '">' +
+                    '<input type="hidden" name="name" value="' + name + '">' +
+                    '</form>');
+                $('body').append($form);
+                $form.submit().remove();
+            });
+
+            // Import Button Click
+            $('#pw-import-btn').on('click', function(e) {
+                e.preventDefault();
+                $('#pw-import-file').click();
+            });
+
+            // Import File Change
+            $('#pw-import-file').on('change', function(e) {
+                const file = this.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append('action', 'pw_import_templates');
+                formData.append('nonce', pwAdmin.nonce);
+                formData.append('file', file);
+
+                const $btn = $('#pw-import-btn');
+                const oldText = $btn.html();
+                $btn.prop('disabled', true).html('<span class="spinner is-active" style="float:none; margin:0 5px 0 0;"></span> Import...');
+
+                $.ajax({
+                    url: pwAdmin.ajaxurl,
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        if (response.success) {
+                            alert(response.data.message || 'Import réussi !');
+                            location.reload();
+                        } else {
+                            alert('Erreur : ' + (response.data.message || 'Format invalide'));
+                        }
+                    },
+                    error: function() {
+                        alert('Erreur réseau lors de l\'import.');
+                    },
+                    complete: function() {
+                        $btn.prop('disabled', false).html(oldText);
+                        $('#pw-import-file').val(''); // Reset
+                    }
+                });
+            });
         } 
     }); 
      

@@ -150,6 +150,7 @@ if (!$table_exists): ?>
                     Initialiser les tables
                 </button>
             </form>
+            <input type="file" id="pw-import-file" style="display:none;" accept=".json">
             <button class="pw-btn pw-btn-secondary" id="pw-import-btn"> 
                 <span class="dashicons dashicons-upload"></span> 
                 Importer 

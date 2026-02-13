@@ -823,11 +823,13 @@
             if (this._toolbarBound) return;
             this._toolbarBound = true;
 
+            this.bindBase64Events();
+
             // Toolbar: Insert Variable
             $(document).on('change', '.pw-var-select', function() {
                 const val = $(this).val();
                 if (val) {
-                    const $textarea = $(this).closest('.pw-variant-toolbar').next('.pw-variant-editor').find('textarea');
+                    const $textarea = $(this).closest('.pw-variant-item').find('.pw-variant-input');
                     TemplateEditor.insertAtCursor($textarea[0], val);
                     $(this).val(''); // Reset
                 }
@@ -835,7 +837,7 @@
 
             // Toolbar: Insert Spintax
             $(document).on('click', '.pw-spintax-btn', function() {
-                const $textarea = $(this).closest('.pw-variant-toolbar').next('.pw-variant-editor').find('textarea');
+                const $textarea = $(this).closest('.pw-variant-item').find('.pw-variant-input');
                 TemplateEditor.insertAtCursor($textarea[0], '{ | }');
             });
         },
@@ -851,7 +853,36 @@
             } else {
                 field.value += value;
             }
-            $(field).focus();
+            $(field).trigger('input').focus(); // Trigger input for auto-save listeners if any
+        },
+
+        // Toolbar: Base64 Encode
+        bindBase64Events() {
+             $(document).on('click', '.pw-base64-btn', function() {
+                const $textarea = $(this).closest('.pw-variant-item').find('.pw-variant-input');
+                const val = $textarea.val();
+                if (val) {
+                    try {
+                        const encoded = btoa(unescape(encodeURIComponent(val)));
+                        $textarea.val(encoded).trigger('input');
+                    } catch (e) {
+                        alert('Erreur d\'encodage Base64.');
+                    }
+                }
+            });
+
+            $(document).on('click', '.pw-base64-decode-btn', function() {
+                const $textarea = $(this).closest('.pw-variant-item').find('.pw-variant-input');
+                const val = $textarea.val();
+                if (val) {
+                    try {
+                        const decoded = decodeURIComponent(escape(window.atob(val)));
+                        $textarea.val(decoded).trigger('input');
+                    } catch (e) {
+                        alert('Le contenu ne semble pas être en Base64 valide.');
+                    }
+                }
+            });
         },
 
         resetForm() {

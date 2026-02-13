@@ -6,6 +6,7 @@ use PostalWarmup\Models\Database;
 use PostalWarmup\Models\Stats;
 use PostalWarmup\Models\Strategy;
 use PostalWarmup\Admin\ISPManager;
+use PostalWarmup\Services\Logger;
 
 /**
  * Service de conseil et de surveillance du warmup

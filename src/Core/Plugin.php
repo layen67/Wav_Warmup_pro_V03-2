@@ -59,7 +59,7 @@ class Plugin {
 			'get_advanced_stats', 'get_stats_table', 'get_server_detail',
 			'process_queue_manual', 'save_isp', 'delete_isp',
 			'save_strategy', 'delete_strategy', 'render_preview',
-			'test_webhook'
+			'test_webhook', 'run_domscan_audit'
 		];
 
 		foreach ( $ajax_actions as $action ) {

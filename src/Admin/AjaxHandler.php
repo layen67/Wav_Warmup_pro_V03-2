@@ -476,6 +476,23 @@ class AjaxHandler {
 		}
 	}
 
+	public function ajax_run_domscan_audit() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_postal_warmup' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$domain = sanitize_text_field( $_POST['domain'] );
+
+		if ( empty( $domain ) ) wp_send_json_error( [ 'message' => 'Domaine manquant' ] );
+
+		$result = \PostalWarmup\Services\DomScanService::audit_domain( $domain );
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+		} else {
+			wp_send_json_success( [ 'data' => $result ] );
+		}
+	}
+
 	public function ajax_render_preview() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );

@@ -111,6 +111,12 @@ class Settings {
 
 		register_setting( 'postal-warmup-settings', 'pw_wl_custom_css', array( 'type' => 'string', 'sanitize_callback' => 'wp_strip_all_tags', 'default' => '' ) ); // Basic sanitization, allow some CSS
 		add_settings_field( 'pw_wl_custom_css', __( 'CSS Personnalisé (Admin)', 'postal-warmup' ), array( $this, 'wl_custom_css_field' ), 'postal-warmup-settings', 'pw_whitelabel_section' );
+
+		// === Section DomScan Integration ===
+		add_settings_section( 'pw_domscan_section', __( 'DomScan Integration', 'postal-warmup' ), array( $this, 'domscan_section_callback' ), 'postal-warmup-settings' );
+
+		register_setting( 'postal-warmup-settings', 'pw_domscan_api_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => '' ) );
+		add_settings_field( 'pw_domscan_api_key', __( 'Clé API DomScan', 'postal-warmup' ), array( $this, 'domscan_api_key_field' ), 'postal-warmup-settings', 'pw_domscan_section' );
 	}
 
 	public function general_section_callback() { echo '<p>' . __( 'Configuration générale des envois.', 'postal-warmup' ) . '</p>'; }
@@ -318,5 +324,18 @@ class Settings {
 		$value = get_option( 'pw_wl_custom_css', '' );
 		echo '<textarea name="pw_wl_custom_css" rows="5" cols="50" class="large-text code">' . esc_textarea( $value ) . '</textarea>';
 		echo '<p class="description">' . __( 'Ce CSS sera chargé sur toutes les pages du plugin.', 'postal-warmup' ) . '</p>';
+	}
+
+	// === DomScan Callbacks ===
+
+	public function domscan_section_callback() {
+		echo '<p>' . __( 'Intégrez DomScan pour auditer automatiquement la santé et la réputation de vos domaines.', 'postal-warmup' ) . '</p>';
+		echo '<p class="description"><a href="https://domscan.net/fr/apis" target="_blank">' . __( 'Obtenir une clé API DomScan', 'postal-warmup' ) . '</a></p>';
+	}
+
+	public function domscan_api_key_field() {
+		$value = get_option( 'pw_domscan_api_key', '' );
+		echo '<input type="text" name="pw_domscan_api_key" value="' . esc_attr( $value ) . '" class="regular-text" placeholder="sk_...">';
+		echo '<p class="description">' . __( 'Requis pour les audits automatiques.', 'postal-warmup' ) . '</p>';
 	}
 }

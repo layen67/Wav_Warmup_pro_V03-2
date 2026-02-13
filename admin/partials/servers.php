@@ -373,6 +373,7 @@ if ($action === 'delete' && $server_id) {
                         <tr>
                             <th><?php _e('Domaine', 'postal-warmup'); ?></th>
                             <th><?php _e('Santé', 'postal-warmup'); ?></th>
+                            <th><?php _e('DomScan', 'postal-warmup'); ?></th>
                             <th><?php _e('Utilisation Jour', 'postal-warmup'); ?></th>
                             <th><?php _e('Priorité', 'postal-warmup'); ?></th>
                             <th><?php _e('Statut', 'postal-warmup'); ?></th>
@@ -425,6 +426,20 @@ if ($action === 'delete' && $server_id) {
                                     <?php if ($health_score < 100) { ?>
                                         <small style="color:#666; font-size:10px;">Analysé il y a 1h</small>
                                     <?php } ?>
+                                </td>
+                                <td>
+                                    <?php
+                                    $audit = \PostalWarmup\Services\DomScanService::get_cached_audit($server['domain']);
+                                    if ($audit) {
+                                        $blacklist = $audit['blacklist_count'] ?? 0;
+                                        $trust = $audit['reputation_score'] ?? '?';
+                                        $color = ($blacklist > 0) ? '#dc3232' : '#46b450';
+                                        echo "<span class='pw-badge' style='background-color:$color'>BL: $blacklist</span>";
+                                        echo "<br><small>Trust: $trust/100</small>";
+                                    } else {
+                                        echo '<button type="button" class="button button-small pw-domscan-btn" data-domain="'.esc_attr($server['domain']).'">Scanner</button>';
+                                    }
+                                    ?>
                                 </td>
                                 <td>
                                     <strong><?php echo $daily_used; ?></strong> <small>(Total Aujourd'hui)</small>

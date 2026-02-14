@@ -70,7 +70,27 @@ register_deactivation_hook( __FILE__, 'deactivate_postal_warmup' );
  * Démarrage
  */
 function run_postal_warmup() {
-	$plugin = new Plugin();
-	$plugin->run();
+	if ( ! class_exists( 'PostalWarmup\Core\Plugin' ) ) {
+		// Log error if possible or just exit silently to avoid white screen
+		error_log( 'Postal Warmup Pro: Plugin class not found. Autoload issue?' );
+		return;
+	}
+
+	try {
+		$plugin = new Plugin();
+		$plugin->run();
+	} catch ( \Throwable $e ) {
+		error_log( 'Postal Warmup Pro Critical Error: ' . $e->getMessage() );
+		// Optional: Show admin notice if in admin area
+		if ( is_admin() ) {
+			add_action( 'admin_notices', function() use ($e) {
+				?>
+				<div class="notice notice-error">
+					<p><strong>Postal Warmup Pro :</strong> Une erreur critique est survenue lors du chargement : <?php echo esc_html( $e->getMessage() ); ?></p>
+				</div>
+				<?php
+			});
+		}
+	}
 }
 run_postal_warmup();

@@ -168,9 +168,14 @@ class Plugin {
 	}
 
 	public function check_upgrade() {
-		if ( get_option( 'pw_version' ) !== PW_VERSION ) {
-			Activator::activate();
-			update_option( 'pw_version', PW_VERSION );
+		try {
+			if ( get_option( 'pw_version' ) !== PW_VERSION ) {
+				Activator::activate();
+				update_option( 'pw_version', PW_VERSION );
+			}
+		} catch ( \Throwable $e ) {
+			// Log error but try not to crash the whole site
+			error_log( 'Postal Warmup Upgrade Error: ' . $e->getMessage() );
 		}
 	}
 

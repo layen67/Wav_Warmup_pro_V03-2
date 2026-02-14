@@ -469,7 +469,7 @@ class Settings {
 	public static function get( $key, $default_override = null ) {
 		$options = get_option( 'pw_settings' );
 
-		if ( $options && isset( $options[$key] ) ) {
+		if ( is_array( $options ) && isset( $options[$key] ) ) {
 			return $options[$key];
 		}
 

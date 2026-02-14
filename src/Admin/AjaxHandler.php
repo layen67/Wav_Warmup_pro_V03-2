@@ -555,4 +555,67 @@ class AjaxHandler {
 
 		wp_send_json_success( [ 'rendered' => $rendered ] );
 	}
+
+	public function ajax_export_settings() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+
+		$settings = get_option( 'pw_settings', [] );
+		$filename = 'pw-settings-' . date('Y-m-d') . '.json';
+
+		header( 'Content-Type: application/json' );
+		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+
+		echo json_encode( $settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
+		exit;
+	}
+
+	public function ajax_import_settings() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+
+		$file = $_FILES['file'] ?? null;
+		if ( empty( $file ) ) wp_send_json_error( [ 'message' => 'No file uploaded' ] );
+
+		$content = file_get_contents( $file['tmp_name'] );
+		$data = json_decode( $content, true );
+
+		if ( ! is_array( $data ) ) wp_send_json_error( [ 'message' => 'Invalid JSON' ] );
+
+		// Validate known keys to prevent garbage injection
+		// We use sanitization from Settings class
+		$settings_instance = new Settings();
+		$sanitized = $settings_instance->sanitize_settings( $data );
+
+		update_option( 'pw_settings', $sanitized );
+
+		wp_send_json_success( [ 'message' => 'Settings imported successfully.' ] );
+	}
+
+	public function ajax_reset_settings() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+
+		delete_option( 'pw_settings' );
+		// Trigger migration to restore defaults
+		$settings_instance = new Settings();
+		$settings_instance->register_settings(); // Triggers migration/defaults
+
+		wp_send_json_success( [ 'message' => 'Settings reset to defaults.' ] );
+	}
+
+	public function ajax_purge_all_data() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+
+		global $wpdb;
+		// Purge Logs, Queue, Stats
+		$wpdb->query( "TRUNCATE TABLE {$wpdb->prefix}postal_logs" );
+		$wpdb->query( "TRUNCATE TABLE {$wpdb->prefix}postal_queue" );
+		$wpdb->query( "TRUNCATE TABLE {$wpdb->prefix}postal_stats" );
+		$wpdb->query( "TRUNCATE TABLE {$wpdb->prefix}postal_stats_daily" );
+		$wpdb->query( "TRUNCATE TABLE {$wpdb->prefix}postal_stats_history" );
+
+		wp_send_json_success( [ 'message' => 'All data purged.' ] );
+	}
 }

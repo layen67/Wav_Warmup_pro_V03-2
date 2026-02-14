@@ -1,42 +1,27 @@
 # Changelog
 
-## [3.2.1] - 2025-05-20
-### Security
-- **Critical**: Added missing capability checks (`manage_options`) to all AJAX endpoints.
-- **Encryption**: Improved API key encryption with secure key generation (fallback to legacy key for backward compatibility).
+## [v3.4.0] - Settings & Architecture Finalization
+- **Feature:** Added sticky "Save Changes" bar for better UX.
+- **Feature:** Implemented Import/Export/Reset logic for settings.
+- **Feature:** Complete Settings Reference documentation.
+- **Fix:** Finalized sanitization for array-based settings.
 
-### Changed
-- **Architecture**: Refactored Admin AJAX handling into `PostalWarmup\Admin\AjaxHandler`.
-- **GDPR**: Added option to disable IP logging for Mailto tracker and anonymize IPs by default.
-- **Performance**: Consolidated dashboard AJAX calls into a single endpoint (`pw_get_dashboard_data`).
-- **Assets**: Localized Chart.js library to remove external CDN dependency.
+## [v3.3.0] - UI/UX Redesign
+- **Feature:** Complete Admin UI overhaul with Cards, Badges, and Progress Bars.
+- **Feature:** Customizable Dashboard Widgets and Auto-Refresh.
+- **Feature:** Theme customization (Colors, Dark Mode, Density).
+- **Feature:** Toast notifications for actions.
 
-## [3.2.0] - 2024-05-24
-### Added
-- **Architecture**: Complete refactor to PSR-4 standards with `PostalWarmup` namespace.
-- **Security**: Added AES-256-CBC encryption for API keys in database.
-- **Security**: Added `pw_webhook_strict_mode` option to enforce webhook signature validation.
-- **Performance**: Added log rotation (keeps last 5 files) to prevent disk saturation.
-- **Performance**: Added "File Only" logging mode (default) to reduce database size.
-- **Optimization**: Added composite SQL indexes on `postal_stats` table for faster queries.
-- **Dev**: Added `package.json` with build scripts for asset minification.
-- **Docs**: Added internal documentation (Architecture, Security, API).
+## [v3.2.0] - Performance & Security
+- **Security:** Webhook Rate Limiting, IP Whitelist, and Strict Mode.
+- **Security:** Dynamic Capability checks and Nonce expiration.
+- **Performance:** Caching Layer with configurable TTLs.
+- **Performance:** Queue Auto-Pause logic and Retry Strategies.
+- **Performance:** Database optimization and Asset loading control.
 
-### Changed
-- **Core**: Migrated all logic from `includes/` to `src/`.
-- **Admin**: Reorganized admin assets into `admin/assets/`.
-- **Webhooks**: Removed sensitive signature logging in `WebhookHandler`.
-- **Database**: Updated `Activator` to automatically patch missing columns/indexes.
-
-### Removed
-- **Legacy**: Removed `admin/class-pw-admin.php` and duplicate code.
-- **Legacy**: Removed `includes/` directory.
-
-## [3.1.0] - 2024-04-15
-### Added
-- Multi-server support.
-- JSON Templates V2 with variants.
-- Mailto tracker.
-
-## [3.0.0] - 2024-01-10
-- Initial public release.
+## [v3.1.1] - Critical Fixes
+- **Fix:** SQL Injection vulnerability in `ORDER BY` clauses.
+- **Fix:** Unbounded database queries capped with `LIMIT`.
+- **Fix:** Removed blocking `sleep()` calls.
+- **Fix:** Implemented Queue Locking to prevent race conditions.
+- **Fix:** Settings API architecture established.

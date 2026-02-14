@@ -78,6 +78,119 @@ if (!array_key_exists($active_tab, $tabs)) {
         submit_button();
         ?>
     </form>
+
+    <!-- Advanced Tools (Only on General or Advanced tab) -->
+    <?php if ($active_tab === 'general' || $active_tab === 'advanced'): ?>
+    <div class="pw-form-section" style="margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px;">
+        <h3><?php _e('Outils Avancés', 'postal-warmup'); ?></h3>
+        <p>
+            <button type="button" class="button" id="pw-export-settings"><?php _e('Exporter les réglages (JSON)', 'postal-warmup'); ?></button>
+            <button type="button" class="button" id="pw-import-settings-btn"><?php _e('Importer les réglages', 'postal-warmup'); ?></button>
+            <input type="file" id="pw-import-settings-file" style="display:none;" accept=".json">
+            <button type="button" class="button button-link-delete" id="pw-reset-settings"><?php _e('Réinitialiser les réglages', 'postal-warmup'); ?></button>
+        </p>
+
+        <?php if ($active_tab === 'advanced'): ?>
+        <p style="margin-top: 20px;">
+            <button type="button" class="button button-link-delete" id="pw-purge-data" style="color: #d63638; border-color: #d63638;">
+                ⚠️ <?php _e('Purger TOUTES les données (Logs, Queue, Stats)', 'postal-warmup'); ?>
+            </button>
+        </p>
+        <?php endif; ?>
+    </div>
+
+    <!-- Sticky Save Bar -->
+    <div class="pw-sticky-save" style="display:none; position: fixed; bottom: 0; left: 160px; right: 0; background: #fff; padding: 15px; border-top: 1px solid #ddd; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 999; display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-weight: 500; color: #333; padding-left: 20px;">⚠️ <?php _e('Vous avez des modifications non enregistrées.', 'postal-warmup'); ?></span>
+        <div style="padding-right: 20px;">
+            <button type="button" class="button" onclick="location.reload();"><?php _e('Annuler', 'postal-warmup'); ?></button>
+            <button type="button" class="button button-primary" onclick="jQuery('.pw-settings-form').submit();"><?php _e('Enregistrer les modifications', 'postal-warmup'); ?></button>
+        </div>
+    </div>
+
+    <script>
+    jQuery(document).ready(function($) {
+        // Sticky Save Logic
+        var $form = $('.pw-settings-form');
+        var $bar = $('.pw-sticky-save');
+        var initialData = $form.serialize();
+
+        $form.on('change input', function() {
+            if ($form.serialize() !== initialData) {
+                $bar.show();
+            } else {
+                $bar.hide();
+            }
+        });
+
+        // Export
+        $('#pw-export-settings').on('click', function() {
+            window.location.href = ajaxurl + '?action=pw_export_settings&nonce=<?php echo wp_create_nonce("pw_admin_nonce"); ?>';
+        });
+
+        // Import
+        $('#pw-import-settings-btn').on('click', function() {
+            $('#pw-import-settings-file').click();
+        });
+
+        $('#pw-import-settings-file').on('change', function() {
+            var file = this.files[0];
+            if (!file) return;
+
+            var formData = new FormData();
+            formData.append('file', file);
+            formData.append('action', 'pw_import_settings');
+            formData.append('nonce', '<?php echo wp_create_nonce("pw_admin_nonce"); ?>');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(res) {
+                    if(res.success) {
+                        alert(res.data.message);
+                        location.reload();
+                    } else {
+                        alert(res.data.message);
+                    }
+                }
+            });
+        });
+
+        // Reset
+        $('#pw-reset-settings').on('click', function() {
+            if(!confirm('Voulez-vous vraiment réinitialiser tous les réglages par défaut ?')) return;
+
+            $.post(ajaxurl, {
+                action: 'pw_reset_settings',
+                nonce: '<?php echo wp_create_nonce("pw_admin_nonce"); ?>'
+            }, function(res) {
+                if(res.success) {
+                    alert(res.data.message);
+                    location.reload();
+                } else {
+                    alert(res.data.message);
+                }
+            });
+        });
+
+        // Purge Data
+        $('#pw-purge-data').on('click', function() {
+            if(!confirm('ATTENTION: Cela va supprimer TOUS les logs, la file d\'attente et les statistiques. Cette action est irréversible. Continuer ?')) return;
+
+            $.post(ajaxurl, {
+                action: 'pw_purge_all_data',
+                nonce: '<?php echo wp_create_nonce("pw_admin_nonce"); ?>'
+            }, function(res) {
+                alert(res.data.message);
+                location.reload();
+            });
+        });
+    });
+    </script>
+    <?php endif; ?>
     
     <!-- System Info (Only on Advanced tab or General?) Let's put it on Advanced or keep it visible at bottom? -->
     <?php if ($active_tab === 'advanced' || $active_tab === 'general'): ?>

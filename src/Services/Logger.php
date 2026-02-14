@@ -230,7 +230,11 @@ class Logger {
 		return $context;
 	}
 
-	public static function debug( $message, $context = [] ) { self::log( $message, self::LEVEL_DEBUG, $context ); }
+	public static function debug( $message, $context = [] ) {
+		if ( Settings::get( 'debug_mode', false ) ) {
+			self::log( $message, self::LEVEL_DEBUG, $context );
+		}
+	}
 	public static function info( $message, $context = [] ) { self::log( $message, self::LEVEL_INFO, $context ); }
 	public static function warning( $message, $context = [] ) { self::log( $message, self::LEVEL_WARNING, $context ); }
 	public static function error( $message, $context = [] ) { self::log( $message, self::LEVEL_ERROR, $context ); }

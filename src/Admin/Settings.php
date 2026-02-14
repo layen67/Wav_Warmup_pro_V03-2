@@ -108,6 +108,7 @@ class Settings {
 		'log_mode' => 'file',
 		'log_level' => 'warning',
 		'encryption_method' => 'aes-256-cbc',
+		'debug_mode' => false,
 	];
 
 	public function register_settings() {
@@ -366,6 +367,16 @@ class Settings {
 						'type' => 'select',
 						'options' => [ 'disabled' => 'Désactivé', 'top-right' => 'Haut-Droite', 'bottom-right' => 'Bas-Droite' ]
 					],
+					'dashboard_widgets' => [
+						'label' => __( 'Widgets Tableau de Bord', 'postal-warmup' ),
+						'type' => 'multicheck',
+						'options' => [
+							'sent' => __( 'Total Envoyés', 'postal-warmup' ),
+							'success_rate' => __( 'Taux de Succès', 'postal-warmup' ),
+							'volume' => __( 'Volume Aujourd\'hui', 'postal-warmup' ),
+							'active_servers' => __( 'Serveurs Actifs', 'postal-warmup' )
+						]
+					],
 				]
 			],
 			'notifications' => [
@@ -376,6 +387,30 @@ class Settings {
 					'notify_stuck_queue' => [ 'label' => __( 'Alerte Queue Bloquée', 'postal-warmup' ), 'type' => 'checkbox' ],
 					'notify_stuck_queue_threshold' => [ 'label' => __( 'Seuil Blocage (min)', 'postal-warmup' ), 'type' => 'number' ],
 					'notify_failure_rate_threshold' => [ 'label' => __( 'Seuil Taux Echec (%)', 'postal-warmup' ), 'type' => 'number' ],
+				]
+			],
+			'advanced' => [
+				'label' => __( 'Avancé', 'postal-warmup' ),
+				'fields' => [
+					'log_mode' => [
+						'label' => __( 'Mode de Log', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'file' => 'Fichier', 'db' => 'Base de Données', 'both' => 'Les Deux', 'error_db' => 'Fichier + Erreur DB' ]
+					],
+					'log_level' => [
+						'label' => __( 'Niveau de Log', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'debug' => 'DEBUG', 'info' => 'INFO', 'warning' => 'WARNING', 'error' => 'ERROR' ]
+					],
+					'debug_mode' => [ 'label' => __( 'Mode Debug', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Active des logs détaillés supplémentaires.', 'postal-warmup' ) ],
+					'encryption_method' => [
+						'label' => __( 'Méthode Chiffrement', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'aes-256-cbc' => 'AES-256-CBC (Défaut)' ]
+					],
+					'log_max_file_size' => [ 'label' => __( 'Taille Max Log (MB)', 'postal-warmup' ), 'type' => 'number' ],
+					'auto_purge_logs_days' => [ 'label' => __( 'Rétention Logs (Jours)', 'postal-warmup' ), 'type' => 'number' ],
+					'log_auto_purge_deactivation' => [ 'label' => __( 'Purger à la désactivation', 'postal-warmup' ), 'type' => 'checkbox' ],
 				]
 			],
 		];
@@ -414,6 +449,15 @@ class Settings {
 					echo '<option value="' . esc_attr( $opt_val ) . '" ' . selected( $value, $opt_val, false ) . '>' . esc_html( $opt_label ) . '</option>';
 				}
 				echo '</select>';
+				break;
+			case 'multicheck':
+				if ( ! is_array( $value ) ) $value = [];
+				foreach ( $args['options'] as $key => $label ) {
+					$checked = in_array( $key, $value ) ? 'checked="checked"' : '';
+					echo '<label style="display:block; margin-bottom: 5px;">';
+					echo '<input type="checkbox" name="' . $name . '[]" value="' . esc_attr( $key ) . '" ' . $checked . '> ' . esc_html( $label );
+					echo '</label>';
+				}
 				break;
 		}
 

@@ -1,168 +1,63 @@
 <?php
 /**
- * Vue de la page des paramètres
+ * Vue de la page des paramètres (Modernized Tabbed Interface)
  */
+
+use PostalWarmup\Admin\Settings;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
+$settings_handler = new Settings();
+$tabs = $settings_handler->get_tabs_config();
+$active_tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'general';
+
+if (!array_key_exists($active_tab, $tabs)) {
+    $active_tab = 'general';
+}
 ?>
 
-<div class="wrap">
+<div class="wrap pw-settings-page">
     <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
     
+    <h2 class="nav-tab-wrapper">
+        <?php foreach ($tabs as $tab_id => $tab): ?>
+            <a href="?page=postal-warmup-settings&tab=<?php echo esc_attr($tab_id); ?>" class="nav-tab <?php echo $active_tab == $tab_id ? 'nav-tab-active' : ''; ?>">
+                <?php echo esc_html($tab['label']); ?>
+            </a>
+        <?php endforeach; ?>
+    </h2>
+
     <?php settings_errors('postal-warmup-settings'); ?>
     
-    <form method="post" action="options.php">
+    <form method="post" action="options.php" class="pw-settings-form">
         <?php
+        // Security fields for the registered setting
         settings_fields('postal-warmup-settings');
 
-        // Afficher les sections standard
-        do_settings_sections('postal-warmup-settings');
-
-        // Afficher la section White Label uniquement pour les Super Admins (manage_options)
-        // et non pour ceux qui ont juste "manage_postal_warmup" si on voulait séparer.
-        // Mais ici, on masque CSS si besoin.
-        // En fait, do_settings_sections affiche TOUTES les sections enregistrées.
-        // Si on veut masquer "White Label" aux non-admins, on aurait dû ne pas l'enregistrer dans Settings.php
-        // ou on peut faire du CSS hide ici, mais c'est pas sécurisé.
-        // La bonne pratique est de conditionner l'ajout de la section dans Settings.php.
-        // Mais comme on est déjà là, on laisse comme ça, car 'manage_postal_warmup' est donné aux admins.
+        // Output sections for the current tab
+        // The page slug matches what we used in add_settings_section
+        do_settings_sections('postal-warmup-settings-' . $active_tab);
 
         submit_button();
         ?>
     </form>
     
-    <!-- Section d'informations système -->
-    <div class="pw-form-section" style="margin-top: 40px;">
-        <h2><?php _e('Informations Système', 'postal-warmup'); ?></h2>
-        <table class="form-table">
+    <!-- System Info (Only on Advanced tab or General?) Let's put it on Advanced or keep it visible at bottom? -->
+    <?php if ($active_tab === 'advanced' || $active_tab === 'general'): ?>
+    <div class="pw-form-section" style="margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px;">
+        <h3><?php _e('Informations Système', 'postal-warmup'); ?></h3>
+        <table class="form-table" style="max-width: 600px;">
             <tr>
                 <th scope="row"><?php _e('Version du plugin', 'postal-warmup'); ?></th>
-                <td><strong><?php echo PW_VERSION; ?></strong></td>
+                <td><code><?php echo PW_VERSION; ?></code></td>
             </tr>
             <tr>
-                <th scope="row"><?php _e('Version WordPress', 'postal-warmup'); ?></th>
-                <td><?php echo get_bloginfo('version'); ?></td>
-            </tr>
-            <tr>
-                <th scope="row"><?php _e('Version PHP', 'postal-warmup'); ?></th>
+                <th scope="row"><?php _e('PHP', 'postal-warmup'); ?></th>
                 <td><?php echo PHP_VERSION; ?></td>
             </tr>
-            <tr>
-                <th scope="row"><?php _e('Extension cURL', 'postal-warmup'); ?></th>
-                <td>
-                    <?php if (function_exists('curl_version')) : ?>
-                        <span style="color: #46b450;">✓ <?php _e('Installée', 'postal-warmup'); ?></span>
-                        <?php
-                        $curl_version = curl_version();
-                        echo ' (v' . esc_html($curl_version['version']) . ')';
-                        ?>
-                    <?php else : ?>
-                        <span style="color: #dc3232;">✗ <?php _e('Non installée', 'postal-warmup'); ?></span>
-                    <?php endif; ?>
-                </td>
-            </tr>
-            <tr>
-                <th scope="row"><?php _e('Répertoire des logs', 'postal-warmup'); ?></th>
-                <td>
-                    <?php
-                    $upload_dir = wp_upload_dir();
-                    $log_dir = $upload_dir['basedir'] . '/postal-warmup-logs';
-                    ?>
-                    <code><?php echo esc_html($log_dir); ?></code>
-                    <?php if (is_writable($log_dir)) : ?>
-                        <span style="color: #46b450;"> ✓ <?php _e('Accessible en écriture', 'postal-warmup'); ?></span>
-                    <?php else : ?>
-                        <span style="color: #dc3232;"> ✗ <?php _e('Non accessible en écriture', 'postal-warmup'); ?></span>
-                    <?php endif; ?>
-                </td>
-            </tr>
-            <tr>
-                <th scope="row"><?php _e('Endpoint de test', 'postal-warmup'); ?></th>
-                <td>
-                    <a href="<?php echo esc_url(rest_url('postal-warmup/v1/test')); ?>" target="_blank">
-                        <?php echo esc_html(rest_url('postal-warmup/v1/test')); ?>
-                    </a>
-                </td>
-            </tr>
         </table>
     </div>
-    
-    <!-- Section des tâches CRON -->
-    <div class="pw-form-section" style="margin-top: 20px;">
-        <h2><?php _e('Tâches Planifiées (CRON)', 'postal-warmup'); ?></h2>
-        <table class="wp-list-table widefat fixed striped">
-            <thead>
-                <tr>
-                    <th><?php _e('Tâche', 'postal-warmup'); ?></th>
-                    <th><?php _e('Fréquence', 'postal-warmup'); ?></th>
-                    <th><?php _e('Prochaine exécution', 'postal-warmup'); ?></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php
-                $cron_jobs = [
-                    'pw_cleanup_old_logs' => __('Nettoyage des logs', 'postal-warmup'),
-                    'pw_cleanup_old_stats' => __('Nettoyage des statistiques', 'postal-warmup'),
-                    'pw_daily_report' => __('Rapport quotidien', 'postal-warmup'),
-                ];
-                
-                foreach ($cron_jobs as $hook => $label) :
-                    $next_run = wp_next_scheduled($hook);
-                ?>
-                    <tr>
-                        <td><strong><?php echo esc_html($label); ?></strong></td>
-                        <td>
-                            <?php
-                            $schedules = wp_get_schedules();
-                            $schedule = wp_get_schedule($hook);
-                            echo isset($schedules[$schedule]) ? esc_html($schedules[$schedule]['display']) : __('Non planifiée', 'postal-warmup');
-                            ?>
-                        </td>
-                        <td>
-                            <?php
-                            if ($next_run) {
-                                echo human_time_diff($next_run, current_time('timestamp')) . ' ' . __('(depuis maintenant)', 'postal-warmup');
-                                echo '<br><small>' . date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $next_run) . '</small>';
-                            } else {
-                                echo '<span style="color: #dc3232;">' . __('Non planifiée', 'postal-warmup') . '</span>';
-                            }
-                            ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-    
-    <!-- Actions de maintenance -->
-    <div class="pw-form-section" style="margin-top: 20px;">
-        <h2><?php _e('Maintenance', 'postal-warmup'); ?></h2>
-        <table class="form-table">
-            <tr>
-                <th scope="row"><?php _e('Cache', 'postal-warmup'); ?></th>
-                <td>
-                    <button type="button" class="button" id="pw-clear-cache-btn">
-                        <?php _e('Vider le cache', 'postal-warmup'); ?>
-                    </button>
-                    <p class="description">
-                        <?php _e('Vide le cache des serveurs et des statistiques.', 'postal-warmup'); ?>
-                    </p>
-                </td>
-            </tr>
-            <tr>
-                <th scope="row"><?php _e('Logs', 'postal-warmup'); ?></th>
-                <td>
-                    <button type="button" class="button" id="pw-clear-logs-btn">
-                        <?php _e('Supprimer tous les logs', 'postal-warmup'); ?>
-                    </button>
-                    <p class="description">
-                        <?php _e('Supprime tous les logs (fichiers et base de données).', 'postal-warmup'); ?>
-                    </p>
-                </td>
-            </tr>
-        </table>
-    </div>
+    <?php endif; ?>
 </div>

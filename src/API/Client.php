@@ -4,6 +4,7 @@ namespace PostalWarmup\API;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Services\Logger;
+use PostalWarmup\Admin\Settings;
 use WP_Error;
 
 /**
@@ -38,7 +39,7 @@ class Client {
 				'Accept'           => 'application/json'
 			],
 			'method'  => $method,
-			'timeout' => 30
+			'timeout' => (int) Settings::get( 'api_timeout', 15 )
 		];
 
 		if ( $method === 'GET' && ! empty( $data ) ) {

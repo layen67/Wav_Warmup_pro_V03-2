@@ -3,6 +3,7 @@
 namespace PostalWarmup\Models;
 
 use PostalWarmup\Services\Encryption;
+use PostalWarmup\Admin\Settings;
 
 /**
  * Classe de gestion de la base de données
@@ -12,20 +13,33 @@ class Database {
 	/**
 	 * Récupère tous les serveurs
 	 */
-	public static function get_servers( bool $only_active = false, string $orderby = 'sent_count', string $order = 'ASC' ): array {
+	public static function get_servers( bool $only_active = false, string $orderby = '', string $order = '' ): array {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_servers';
 		
 		$where = $only_active ? "WHERE active = 1" : "";
 		$allowed_cols = [ 'id', 'domain', 'api_url', 'sent_count', 'success_count', 'error_count', 'last_used' ];
 		
+		// Use defaults from Settings if not provided
+		if ( empty( $orderby ) ) {
+			$orderby = Settings::get( 'default_sort_column', 'sent_count' );
+		}
+
+		if ( empty( $order ) ) {
+			$order = Settings::get( 'default_sort_order', 'DESC' );
+		}
+
 		if ( ! in_array( $orderby, $allowed_cols ) ) {
 			$orderby = 'sent_count';
 		}
 		
 		$order = ( strtoupper( $order ) === 'DESC' ) ? 'DESC' : 'ASC';
 		
-		$results = $wpdb->get_results( "SELECT * FROM $table $where ORDER BY $orderby $order", ARRAY_A );
+		// Add LIMIT based on settings (optional for list, but good for performance)
+		$limit = (int) Settings::get( 'db_query_limit', 500 );
+		if ( $limit <= 0 ) $limit = 500;
+
+		$results = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $table $where ORDER BY $orderby $order LIMIT %d", $limit ), ARRAY_A );
 
 		// Décrypter les clés API
 		if ( $results ) {
@@ -251,6 +265,15 @@ class Database {
 		$where_values[] = $per_page;
 		$where_values[] = $offset;
 		
+		// Ensure LIMIT is respected but pagination handles it via per_page
+		// We should enforce max per_page from settings?
+		// No, pagination logic usually dictates explicit page size.
+		// But let's check db_query_limit to prevent abuse.
+		$max_limit = (int) Settings::get( 'db_query_limit', 500 );
+		if ( $per_page > $max_limit ) $per_page = $max_limit;
+
+		$where_values[ count($where_values) - 2 ] = $per_page; // Update limit in values array
+
 		$sql = "SELECT * FROM $table $where ORDER BY created_at DESC LIMIT %d OFFSET %d";
 		
 		if ( ! empty( $where_values ) ) {
@@ -296,6 +319,9 @@ class Database {
 		$logs_table = $wpdb->prefix . 'postal_logs';
 		$servers_table = $wpdb->prefix . 'postal_servers';
 		
+		$max_limit = (int) Settings::get( 'db_query_limit', 500 );
+		if ( $limit > $max_limit ) $limit = $max_limit;
+
 		return $wpdb->get_results( $wpdb->prepare(
 			"SELECT l.*, s.domain as server_domain
 			FROM $logs_table l 

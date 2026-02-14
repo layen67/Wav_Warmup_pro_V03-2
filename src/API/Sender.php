@@ -5,6 +5,7 @@ namespace PostalWarmup\API;
 use PostalWarmup\Models\Database;
 use PostalWarmup\Services\Logger;
 use PostalWarmup\Core\TemplateEngine;
+use PostalWarmup\Admin\Settings;
 
 /**
  * Classe d'envoi des emails via Postal
@@ -15,7 +16,7 @@ class Sender {
 	 * Enregistre les hooks pour Action Scheduler
 	 */
 	public function init() {
-		add_action( 'pw_send_email_async', array( $this, 'process_queue' ), 10, 5 );
+		add_action( 'pw_send_email_async', array( $this, 'process_queue' ), 10, 6 );
 	}
 
 	/**
@@ -61,7 +62,7 @@ class Sender {
 	/**
 	 * Worker
 	 */
-	public function process_queue( $to, $domain, $prefix, $server_id, $retry_count = 0 ) {
+	public function process_queue( $to, $domain, $prefix, $server_id, $retry_count = 0, $handle_retry = true ) {
 		
 		$server = Database::get_server( $server_id );
 		if ( ! $server ) {
@@ -130,15 +131,32 @@ class Sender {
 		Database::increment_sent( $domain, false, $response_time );
 		Database::record_stat( $server['id'], false, $response_time );
 		
-		$max_retries = get_option( 'pw_max_retries', 3 );
+		if ( ! $handle_retry ) {
+			return $result;
+		}
+
+		$max_retries = (int) Settings::get( 'max_retries', 3 );
 		
 		if ( $retry_count < $max_retries ) {
 			if ( function_exists( 'as_schedule_single_action' ) ) {
-				$delay = pow( 2, $retry_count + 1 ) * 60; 
+				// Use configured strategy
+				$base = (int) Settings::get( 'retry_delay_base', 60 );
+				$strategy = Settings::get( 'retry_strategy', 'fixed' );
+				$max_delay = (int) Settings::get( 'retry_delay_max', 900 );
+
+				$delay = $base;
+				if ( $strategy === 'linear' ) {
+					$delay = $base * ($retry_count + 1);
+				} elseif ( $strategy === 'exponential' ) {
+					$delay = $base * pow( 2, $retry_count + 1 );
+				}
+
+				if ( $delay > $max_delay ) $delay = $max_delay;
+
 				as_schedule_single_action(
 					time() + $delay, 
 					'pw_send_email_async', 
-					array( $to, $domain, $prefix, $server_id, $retry_count + 1 ),
+					array( $to, $domain, $prefix, $server_id, $retry_count + 1, true ), // Pass handle_retry=true explicitly
 					'postal-warmup'
 				);
 				Logger::warning( "Worker: Échec envoi, replanifié dans {$delay}s", [ 
@@ -170,7 +188,7 @@ class Sender {
 				'X-Server-API-Key' => $api_key
 			],
 			'body'      => json_encode( $payload ),
-			'timeout'   => 30,
+			'timeout'   => (int) Settings::get( 'api_timeout', 15 ),
 			'sslverify' => true
 		]);
 		

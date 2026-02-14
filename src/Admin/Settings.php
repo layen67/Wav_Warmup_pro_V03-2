@@ -3,368 +3,312 @@
 namespace PostalWarmup\Admin;
 
 class Settings {
+
+	private $option_name = 'pw_settings';
+
+	// Default Settings Configuration
+	private $defaults = [
+		// General
+		'global_tag' => 'warmup',
+		'disable_ip_logging' => false,
+		'enable_logging' => true,
+
+		// Security
+		'webhook_strict_mode' => true,
+		'webhook_secret' => '',
+		'nonce_expiration' => 12,
+		'required_capability' => 'manage_options',
+		'mask_api_keys_logs' => true,
+		'mask_api_keys_ui' => true,
+		'log_sensitive_data' => 'masked', // full, masked, none
+
+		// Queue
+		'queue_batch_size' => 20,
+		'queue_interval' => 5,
+		'max_queue_workers' => 1,
+		'queue_locking_enabled' => true,
+		'queue_lock_timeout' => 60,
+		'max_retries' => 3,
+		'retry_strategy' => 'fixed', // fixed, exponential, linear
+		'retry_delay_base' => 60,
+		'retry_delay_max' => 900,
+		'cron_method' => 'wp_cron',
+
+		// Warmup
+		'warmup_mode' => 'linear',
+		'warmup_start' => 10,
+		'warmup_max' => 1000,
+		'warmup_days' => 30,
+		'warmup_increase_percent' => 20,
+		'pause_bounce_rate' => 5,
+		'pause_spam_rate' => 1,
+		'pause_failure_rate' => 10,
+
+		// Performance
+		'enable_transient_cache' => true,
+		'cache_ttl_server' => 300,
+		'cache_ttl_stats' => 600,
+		'cache_ttl_api' => 300,
+		'auto_purge_queue_days' => 90,
+		'auto_purge_logs_days' => 30,
+		'api_timeout' => 15,
+		'db_query_limit' => 500,
+		'db_transactions' => true,
+
+		// Interface
+		'dashboard_refresh' => 30,
+		'default_sort_column' => 'sent_count',
+		'default_sort_order' => 'DESC',
+		'default_rows_per_page' => 25,
+		'color_theme' => 'blue',
+		'enable_animations' => true,
+
+		// Notifications
+		'notify_email' => '',
+		'notify_on_error' => true,
+		'notify_daily_report' => false,
+		'notify_stuck_queue' => true,
+		'notify_api_error' => true,
+
+		// Advanced
+		'log_mode' => 'file',
+		'log_level' => 'warning',
+		'encryption_method' => 'aes-256-cbc',
+	];
+
 	public function register_settings() {
-		// === Section General ===
-		add_settings_section( 'pw_general_section', __( 'Options Générales', 'postal-warmup' ), array( $this, 'general_section_callback' ), 'postal-warmup-settings' );
-		register_setting( 'postal-warmup-settings', 'pw_global_tag', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => 'warmup' ) );
-		add_settings_field( 'pw_global_tag', __( 'Tag Postal Global', 'postal-warmup' ), array( $this, 'global_tag_field' ), 'postal-warmup-settings', 'pw_general_section' );
+		// Register the single array option
+		register_setting(
+			'postal-warmup-settings',
+			$this->option_name,
+			[ 'sanitize_callback' => [ $this, 'sanitize_settings' ] ]
+		);
 
-		register_setting( 'postal-warmup-settings', 'pw_disable_ip_logging', array( 'type' => 'boolean', 'default' => false ) );
-		add_settings_field( 'pw_disable_ip_logging', __( 'Conformité RGPD', 'postal-warmup' ), array( $this, 'disable_ip_logging_field' ), 'postal-warmup-settings', 'pw_general_section' );
+		// Migration: If pw_settings is empty, try to fill from old options
+		if ( false === get_option( $this->option_name ) ) {
+			$this->migrate_old_options();
+		}
 
-		// === Section Logs ===
-		add_settings_section( 'pw_logs_section', __( 'Gestion des Logs', 'postal-warmup' ), array( $this, 'logs_section_callback' ), 'postal-warmup-settings' );
-		register_setting( 'postal-warmup-settings', 'pw_enable_logging', array( 'type' => 'boolean', 'default' => true ) );
-		register_setting( 'postal-warmup-settings', 'pw_log_mode', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key', 'default' => 'file' ) );
-		add_settings_field( 'pw_enable_logging', __( 'Configuration des logs', 'postal-warmup' ), array( $this, 'enable_logging_field' ), 'postal-warmup-settings', 'pw_logs_section' );
+		// Register Sections & Fields based on active Tab
+		$this->register_all_sections();
+	}
 
-		register_setting( 'postal-warmup-settings', 'pw_log_retention_days', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 30 ) );
-		add_settings_field( 'pw_log_retention_days', __( 'Rétention des logs (jours)', 'postal-warmup' ), array( $this, 'log_retention_field' ), 'postal-warmup-settings', 'pw_logs_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_queue_retention_days', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 7 ) );
-		add_settings_field( 'pw_queue_retention_days', __( 'Rétention de la file d\'attente (jours)', 'postal-warmup' ), array( $this, 'queue_retention_field' ), 'postal-warmup-settings', 'pw_logs_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_stats_retention_days', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 90 ) );
-		add_settings_field( 'pw_stats_retention_days', __( 'Rétention des statistiques (jours)', 'postal-warmup' ), array( $this, 'stats_retention_field' ), 'postal-warmup-settings', 'pw_logs_section' );
+	private function migrate_old_options() {
+		$new = $this->defaults;
 		
-		// === Section Statistiques ===
-		add_settings_section( 'pw_stats_section', __( 'Statistiques', 'postal-warmup' ), array( $this, 'stats_section_callback' ), 'postal-warmup-settings' );
-		register_setting( 'postal-warmup-settings', 'pw_stats_enabled', array( 'type' => 'boolean', 'default' => true ) );
-		add_settings_field( 'pw_stats_enabled', __( 'Activer les statistiques', 'postal-warmup' ), array( $this, 'stats_enabled_field' ), 'postal-warmup-settings', 'pw_stats_section' );
-		
-		// === Section Limites (RESTORED) ===
-		add_settings_section( 'pw_limits_section', __( 'Limites d\'envoi', 'postal-warmup' ), array( $this, 'limits_section_callback' ), 'postal-warmup-settings' );
-		register_setting( 'postal-warmup-settings', 'pw_daily_limit', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0 ) );
-		add_settings_field( 'pw_daily_limit', __( 'Limite quotidienne', 'postal-warmup' ), array( $this, 'daily_limit_field' ), 'postal-warmup-settings', 'pw_limits_section' );
-		register_setting( 'postal-warmup-settings', 'pw_rate_limit_per_hour', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0 ) );
-		add_settings_field( 'pw_rate_limit_per_hour', __( 'Limite horaire par serveur', 'postal-warmup' ), array( $this, 'rate_limit_field' ), 'postal-warmup-settings', 'pw_limits_section' );
-		register_setting( 'postal-warmup-settings', 'pw_max_retries', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 3 ) );
-		add_settings_field( 'pw_max_retries', __( 'Nombre de tentatives', 'postal-warmup' ), array( $this, 'max_retries_field' ), 'postal-warmup-settings', 'pw_limits_section' );
-
-		// === Section Notifications (RESTORED) ===
-		add_settings_section( 'pw_notifications_section', __( 'Notifications', 'postal-warmup' ), array( $this, 'notifications_section_callback' ), 'postal-warmup-settings' );
-		register_setting( 'postal-warmup-settings', 'pw_notification_email', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_email', 'default' => get_option( 'admin_email' ) ) );
-		add_settings_field( 'pw_notification_email', __( 'Email de notification', 'postal-warmup' ), array( $this, 'notification_email_field' ), 'postal-warmup-settings', 'pw_notifications_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_notify_on_error', array( 'type' => 'boolean', 'default' => true ) );
-		add_settings_field( 'pw_notify_on_error', __( 'Alerter sur erreur', 'postal-warmup' ), array( $this, 'notify_on_error_field' ), 'postal-warmup-settings', 'pw_notifications_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_daily_report', array( 'type' => 'boolean', 'default' => false ) );
-		add_settings_field( 'pw_daily_report', __( 'Rapport quotidien', 'postal-warmup' ), array( $this, 'daily_report_field' ), 'postal-warmup-settings', 'pw_notifications_section' );
-
-		// === Section Performance & Advisor ===
-		add_settings_section( 'pw_performance_section', __( 'Performance & Advisor', 'postal-warmup' ), array( $this, 'performance_section_callback' ), 'postal-warmup-settings' );
-
-		register_setting( 'postal-warmup-settings', 'pw_queue_batch_size', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 20 ) );
-		add_settings_field( 'pw_queue_batch_size', __( 'Taille du lot (Queue)', 'postal-warmup' ), array( $this, 'queue_batch_size_field' ), 'postal-warmup-settings', 'pw_performance_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_advisor_enabled', array( 'type' => 'boolean', 'default' => true ) );
-		add_settings_field( 'pw_advisor_enabled', __( 'Activer l\'Advisor', 'postal-warmup' ), array( $this, 'advisor_enabled_field' ), 'postal-warmup-settings', 'pw_performance_section' );
-
-		// === Section Webhooks ===
-		add_settings_section( 'pw_webhooks_section', __( 'Webhooks', 'postal-warmup' ), array( $this, 'webhooks_section_callback' ), 'postal-warmup-settings' );
-
-		register_setting( 'postal-warmup-settings', 'pw_webhook_enabled', array( 'type' => 'boolean', 'default' => false ) );
-		add_settings_field( 'pw_webhook_enabled', __( 'Activer le Webhook', 'postal-warmup' ), array( $this, 'webhook_enabled_field' ), 'postal-warmup-settings', 'pw_webhooks_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_webhook_url', array( 'type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => '' ) );
-		add_settings_field( 'pw_webhook_url', __( 'URL du Webhook', 'postal-warmup' ), array( $this, 'webhook_url_field' ), 'postal-warmup-settings', 'pw_webhooks_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_webhook_events', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_webhook_events' ), 'default' => [] ) );
-		add_settings_field( 'pw_webhook_events', __( 'Événements', 'postal-warmup' ), array( $this, 'webhook_events_field' ), 'postal-warmup-settings', 'pw_webhooks_section' );
-
-		// === Section Health & Safety ===
-		add_settings_section( 'pw_safety_section', __( 'Santé & Sécurité', 'postal-warmup' ), array( $this, 'safety_section_callback' ), 'postal-warmup-settings' );
-
-		register_setting( 'postal-warmup-settings', 'pw_health_score_threshold', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 50 ) );
-		add_settings_field( 'pw_health_score_threshold', __( 'Seuil Critique de Santé', 'postal-warmup' ), array( $this, 'health_score_threshold_field' ), 'postal-warmup-settings', 'pw_safety_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_health_score_action', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key', 'default' => 'none' ) );
-		add_settings_field( 'pw_health_score_action', __( 'Action sur Score Faible', 'postal-warmup' ), array( $this, 'health_score_action_field' ), 'postal-warmup-settings', 'pw_safety_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_smart_routing_enabled', array( 'type' => 'boolean', 'default' => true ) );
-		add_settings_field( 'pw_smart_routing_enabled', __( 'Rotation Intelligente (Smart Routing)', 'postal-warmup' ), array( $this, 'smart_routing_enabled_field' ), 'postal-warmup-settings', 'pw_safety_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_smart_routing_error_threshold', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 5 ) );
-		add_settings_field( 'pw_smart_routing_error_threshold', __( 'Seuil d\'Erreurs par ISP (%)', 'postal-warmup' ), array( $this, 'smart_routing_error_threshold_field' ), 'postal-warmup-settings', 'pw_safety_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_smart_routing_cooldown', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 60 ) );
-		add_settings_field( 'pw_smart_routing_cooldown', __( 'Durée de Pénalité (Cooldown)', 'postal-warmup' ), array( $this, 'smart_routing_cooldown_field' ), 'postal-warmup-settings', 'pw_safety_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_reputation_monitoring_enabled', array( 'type' => 'boolean', 'default' => true ) );
-		add_settings_field( 'pw_reputation_monitoring_enabled', __( 'Surveillance de la Réputation', 'postal-warmup' ), array( $this, 'reputation_monitoring_enabled_field' ), 'postal-warmup-settings', 'pw_safety_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_reputation_drop_sensitivity', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 20 ) );
-		add_settings_field( 'pw_reputation_drop_sensitivity', __( 'Sensibilité de Chute (%)', 'postal-warmup' ), array( $this, 'reputation_drop_sensitivity_field' ), 'postal-warmup-settings', 'pw_safety_section' );
-
-		// === Section White Label (Marque Blanche) ===
-		add_settings_section( 'pw_whitelabel_section', __( 'Marque Blanche', 'postal-warmup' ), array( $this, 'whitelabel_section_callback' ), 'postal-warmup-settings' );
-
-		register_setting( 'postal-warmup-settings', 'pw_wl_menu_name', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => 'Postal Warmup' ) );
-		add_settings_field( 'pw_wl_menu_name', __( 'Nom du Menu', 'postal-warmup' ), array( $this, 'wl_menu_name_field' ), 'postal-warmup-settings', 'pw_whitelabel_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_wl_menu_icon', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_html_class', 'default' => 'dashicons-email-alt' ) );
-		add_settings_field( 'pw_wl_menu_icon', __( 'Icône Dashicon', 'postal-warmup' ), array( $this, 'wl_menu_icon_field' ), 'postal-warmup-settings', 'pw_whitelabel_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_wl_hide_footer', array( 'type' => 'boolean', 'default' => false ) );
-		add_settings_field( 'pw_wl_hide_footer', __( 'Masquer le texte "Postal Warmup" du footer', 'postal-warmup' ), array( $this, 'wl_hide_footer_field' ), 'postal-warmup-settings', 'pw_whitelabel_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_wl_custom_css', array( 'type' => 'string', 'sanitize_callback' => 'wp_strip_all_tags', 'default' => '' ) ); // Basic sanitization, allow some CSS
-		add_settings_field( 'pw_wl_custom_css', __( 'CSS Personnalisé (Admin)', 'postal-warmup' ), array( $this, 'wl_custom_css_field' ), 'postal-warmup-settings', 'pw_whitelabel_section' );
-
-		// === Section DomScan Integration ===
-		add_settings_section( 'pw_domscan_section', __( 'DomScan Integration', 'postal-warmup' ), array( $this, 'domscan_section_callback' ), 'postal-warmup-settings' );
-
-		register_setting( 'postal-warmup-settings', 'pw_domscan_api_key', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => '' ) );
-		add_settings_field( 'pw_domscan_api_key', __( 'Clé API DomScan', 'postal-warmup' ), array( $this, 'domscan_api_key_field' ), 'postal-warmup-settings', 'pw_domscan_section' );
-
-		register_setting( 'postal-warmup-settings', 'pw_domscan_tools', array( 'type' => 'array', 'sanitize_callback' => array( $this, 'sanitize_domscan_tools' ), 'default' => [ 'health', 'blacklist', 'reputation' ] ) );
-		add_settings_field( 'pw_domscan_tools', __( 'Outils à utiliser', 'postal-warmup' ), array( $this, 'domscan_tools_field' ), 'postal-warmup-settings', 'pw_domscan_section' );
-	}
-
-	public function general_section_callback() { echo '<p>' . __( 'Configuration générale des envois.', 'postal-warmup' ) . '</p>'; }
-	
-	public function global_tag_field() {
-		$value = get_option( 'pw_global_tag', 'warmup' );
-		echo '<input type="text" name="pw_global_tag" value="' . esc_attr( $value ) . '" class="regular-text">';
-		echo '<p class="description">' . __( 'Ce tag sera ajouté à tous les emails envoyés par le plugin pour faciliter le filtrage dans Postal.', 'postal-warmup' ) . '</p>';
-	}
-
-	public function disable_ip_logging_field() {
-		$value = get_option( 'pw_disable_ip_logging', false );
-		echo '<label><input type="checkbox" name="pw_disable_ip_logging" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Désactiver le tracking des adresses IP (Mailto)', 'postal-warmup' ) . '</label>';
-		echo '<p class="description">' . __( 'Si désactivé, les IPs ne seront pas stockées lors des clics sur les liens mailto. Sinon, elles seront anonymisées (dernier octet masqué).', 'postal-warmup' ) . '</p>';
-	}
-
-	public function logs_section_callback() { echo '<p>' . __( 'Gérez la conservation des logs.', 'postal-warmup' ) . '</p>'; }
-	public function stats_section_callback() { echo '<p>' . __( 'Configuration des statistiques.', 'postal-warmup' ) . '</p>'; }
-	public function limits_section_callback() { echo '<p>' . __( 'Définissez des limites pour éviter l\'abus.', 'postal-warmup' ) . '</p>'; }
-	public function notifications_section_callback() { echo '<p>' . __( 'Configuration des alertes email.', 'postal-warmup' ) . '</p>'; }
-	public function performance_section_callback() { echo '<p>' . __( 'Optimisation des performances et surveillance.', 'postal-warmup' ) . '</p>'; }
-
-	public function enable_logging_field() {
-		$enabled = get_option( 'pw_enable_logging', true );
-		$mode = get_option( 'pw_log_mode', 'file' );
-		
-		echo '<label><input type="checkbox" name="pw_enable_logging" value="1" ' . checked( $enabled, true, false ) . '> ' . __( 'Activer les logs', 'postal-warmup' ) . '</label><br><br>';
-		
-		echo '<label for="pw_log_mode">' . __( 'Mode de stockage :', 'postal-warmup' ) . '</label><br>';
-		echo '<select name="pw_log_mode" id="pw_log_mode">';
-		echo '<option value="file" ' . selected( $mode, 'file', false ) . '>' . __( 'Fichier uniquement (Recommandé)', 'postal-warmup' ) . '</option>';
-		echo '<option value="db" ' . selected( $mode, 'db', false ) . '>' . __( 'Base de données uniquement', 'postal-warmup' ) . '</option>';
-		echo '<option value="both" ' . selected( $mode, 'both', false ) . '>' . __( 'Les deux (Debug)', 'postal-warmup' ) . '</option>';
-		echo '<option value="error_db" ' . selected( $mode, 'error_db', false ) . '>' . __( 'Fichier + BDD (Erreurs seulement)', 'postal-warmup' ) . '</option>';
-		echo '</select>';
-		echo '<p class="description">' . __( 'Pour des performances optimales, utilisez "Fichier uniquement" ou "Fichier + BDD (Erreurs seulement)".', 'postal-warmup' ) . '</p>';
-	}
-
-	public function log_retention_field() {
-		$value = get_option( 'pw_log_retention_days', 30 );
-		echo '<input type="number" name="pw_log_retention_days" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( 'jours', 'postal-warmup' );
-	}
-
-	public function queue_retention_field() {
-		$value = get_option( 'pw_queue_retention_days', 7 );
-		echo '<input type="number" name="pw_queue_retention_days" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( 'jours (Messages envoyés/échoués uniquement)', 'postal-warmup' );
-	}
-	public function stats_retention_field() {
-		$value = get_option( 'pw_stats_retention_days', 90 );
-		echo '<input type="number" name="pw_stats_retention_days" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( 'jours', 'postal-warmup' );
-	}
-	public function stats_enabled_field() {
-		$value = get_option( 'pw_stats_enabled', true );
-		echo '<input type="checkbox" name="pw_stats_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Activer', 'postal-warmup' );
-	}
-	public function daily_limit_field() {
-		$value = get_option( 'pw_daily_limit', 0 );
-		echo '<input type="number" name="pw_daily_limit" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( '0 = illimité', 'postal-warmup' );
-	}
-	public function rate_limit_field() {
-		$value = get_option( 'pw_rate_limit_per_hour', 0 );
-		echo '<input type="number" name="pw_rate_limit_per_hour" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( '0 = illimité', 'postal-warmup' );
-	}
-	public function max_retries_field() {
-		$value = get_option( 'pw_max_retries', 3 );
-		echo '<input type="number" name="pw_max_retries" value="' . esc_attr( $value ) . '" class="small-text">';
-	}
-	public function notification_email_field() {
-		$value = get_option( 'pw_notification_email', get_option( 'admin_email' ) );
-		echo '<input type="email" name="pw_notification_email" value="' . esc_attr( $value ) . '" class="regular-text">';
-	}
-	public function notify_on_error_field() {
-		$value = get_option( 'pw_notify_on_error', true );
-		echo '<label><input type="checkbox" name="pw_notify_on_error" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Recevoir une notification en cas d\'erreur critique', 'postal-warmup' ) . '</label>';
-	}
-	public function daily_report_field() {
-		$value = get_option( 'pw_daily_report', false );
-		echo '<label><input type="checkbox" name="pw_daily_report" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Recevoir un rapport quotidien des envois', 'postal-warmup' ) . '</label>';
-	}
-	public function queue_batch_size_field() {
-		$value = get_option( 'pw_queue_batch_size', 20 );
-		echo '<input type="number" name="pw_queue_batch_size" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( 'emails par minute (défaut: 20)', 'postal-warmup' );
-	}
-	public function advisor_enabled_field() {
-		$value = get_option( 'pw_advisor_enabled', true );
-		echo '<label><input type="checkbox" name="pw_advisor_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Activer l\'analyse automatique (Conseiller Warmup)', 'postal-warmup' ) . '</label>';
-	}
-
-	// === Webhooks Callbacks ===
-
-	public function webhooks_section_callback() { echo '<p>' . __( 'Configurez un webhook pour recevoir des notifications lors des événements d\'envoi.', 'postal-warmup' ) . '</p>'; }
-
-	public function webhook_enabled_field() {
-		$value = get_option( 'pw_webhook_enabled', false );
-		echo '<label><input type="checkbox" name="pw_webhook_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Activer l\'envoi de requêtes vers ce webhook', 'postal-warmup' ) . '</label>';
-	}
-
-	public function webhook_url_field() {
-		$value = get_option( 'pw_webhook_url', '' );
-		echo '<div style="display:flex; align-items:center;">';
-		echo '<input type="url" name="pw_webhook_url" id="pw_webhook_url" value="' . esc_attr( $value ) . '" class="regular-text" placeholder="https://exemple.com/webhook">';
-		echo '<button type="button" class="button" id="pw-test-webhook-btn" style="margin-left:10px;">' . __( 'Tester l\'URL', 'postal-warmup' ) . '</button>';
-		echo '</div>';
-		echo '<p class="description">' . __( 'L\'URL qui recevra les requêtes POST avec un payload JSON.', 'postal-warmup' ) . '</p>';
-		echo '<div id="pw-webhook-test-result" style="margin-top:5px; font-weight:bold;"></div>';
-	}
-
-	public function webhook_events_field() {
-		$events = get_option( 'pw_webhook_events', [] );
-		if ( ! is_array( $events ) ) $events = [];
-
-		$available_events = [
-			'MessageSent' => __( 'MessageSent (Succès d\'envoi)', 'postal-warmup' ),
-			'MessageDeliveryFailed' => __( 'MessageDeliveryFailed (Échec d\'envoi)', 'postal-warmup' ),
-			'MessageDelayed' => __( 'MessageDelayed (Retardé)', 'postal-warmup' ),
-			'MessageHeld' => __( 'MessageHeld (Retenu)', 'postal-warmup' ),
-			'MessageBounced' => __( 'MessageBounced (Rebond)', 'postal-warmup' ),
-			'MessageLinkClicked' => __( 'MessageLinkClicked (Clic)', 'postal-warmup' ),
-			'MessageLoaded' => __( 'MessageLoaded (Ouverture)', 'postal-warmup' ),
-			'DomainDNSError' => __( 'DomainDNSError (Erreur DNS)', 'postal-warmup' ),
+		// Map old keys to new keys
+		$map = [
+			'pw_global_tag' => 'global_tag',
+			'pw_enable_logging' => 'enable_logging',
+			'pw_disable_ip_logging' => 'disable_ip_logging',
+			'pw_queue_batch_size' => 'queue_batch_size',
+			'pw_log_retention_days' => 'auto_purge_logs_days',
+			'pw_queue_retention_days' => 'auto_purge_queue_days',
+			'pw_stats_retention_days' => 'stats_retention_days',
+			'pw_daily_limit' => 'daily_limit_global',
+			'pw_rate_limit_per_hour' => 'hourly_limit_global',
+			'pw_max_retries' => 'max_retries',
+			'pw_notification_email' => 'notify_email',
+			'pw_notify_on_error' => 'notify_on_error',
+			'pw_daily_report' => 'notify_daily_report',
+			'pw_log_mode' => 'log_mode',
 		];
 
-		echo '<fieldset>';
-		foreach ( $available_events as $key => $label ) {
-			$checked = in_array( $key, $events ) ? 'checked="checked"' : '';
-			echo '<label style="display:block; margin-bottom: 5px;">';
-			echo '<input type="checkbox" name="pw_webhook_events[]" value="' . esc_attr( $key ) . '" ' . $checked . '> ' . esc_html( $label );
-			echo '</label>';
+		foreach ( $map as $old => $new_key ) {
+			$val = get_option( $old );
+			if ( $val !== false ) {
+				$new[$new_key] = $val;
+			}
 		}
-		echo '</fieldset>';
+
+		update_option( $this->option_name, $new );
 	}
 
-	public function sanitize_webhook_events( $input ) {
-		if ( ! is_array( $input ) ) return [];
-		return array_map( 'sanitize_text_field', $input );
+	public function sanitize_settings( $input ) {
+		$output = get_option( $this->option_name, $this->defaults );
+		if ( ! is_array( $output ) ) $output = $this->defaults;
+
+		foreach ( $this->defaults as $key => $default ) {
+			if ( isset( $input[$key] ) ) {
+				$type = gettype( $default );
+				if ( $type === 'integer' ) {
+					$output[$key] = absint( $input[$key] );
+				} elseif ( $type === 'boolean' ) {
+					$output[$key] = (bool) $input[$key];
+				} else {
+					$output[$key] = sanitize_text_field( $input[$key] );
+				}
+			} else {
+				// Checkbox unchecked case (only if we know it was submitted, usually handled by hidden field or assumption)
+				// For simplicity in WP Settings API, if a section is submitted, fields missing are unchecked checkboxes
+				// But since we have tabs, we need to be careful not to unset fields from other tabs.
+				// However, register_setting handles the whole array.
+				// If we submit only one tab, $input will only contain fields from that tab.
+				// We must merge with existing options.
+				// Done above: $output initialized with existing options.
+			}
+		}
+
+		return $output;
 	}
 
-	// === Health & Safety Callbacks ===
+	private function register_all_sections() {
+		$tabs = $this->get_tabs_config();
 
-	public function safety_section_callback() { echo '<p>' . __( 'Configurez les seuils de sécurité et les actions automatiques pour protéger votre réputation.', 'postal-warmup' ) . '</p>'; }
+		foreach ( $tabs as $tab_id => $tab ) {
+			// Use a unique page slug for each tab
+			$page_slug = 'postal-warmup-settings-' . $tab_id;
 
-	public function health_score_threshold_field() {
-		$value = get_option( 'pw_health_score_threshold', 50 );
-		echo '<input type="number" name="pw_health_score_threshold" value="' . esc_attr( $value ) . '" class="small-text" min="0" max="100"> ' . __( '/ 100', 'postal-warmup' );
-		echo '<p class="description">' . __( 'Si le score de santé passe sous ce seuil, une alerte sera déclenchée.', 'postal-warmup' ) . '</p>';
+			add_settings_section(
+				'pw_section_' . $tab_id,
+				$tab['label'],
+				[ $this, 'section_callback' ],
+				$page_slug
+			);
+
+			foreach ( $tab['fields'] as $field_id => $field ) {
+				add_settings_field(
+					$field_id,
+					$field['label'],
+					[ $this, 'render_field' ],
+					$page_slug,
+					'pw_section_' . $tab_id,
+					[
+						'id' => $field_id,
+						'type' => $field['type'],
+						'options' => $field['options'] ?? [],
+						'desc' => $field['desc'] ?? '',
+						'label_for' => 'pw_settings[' . $field_id . ']' // Accessibility
+					]
+				);
+			}
+		}
 	}
 
-	public function health_score_action_field() {
-		$value = get_option( 'pw_health_score_action', 'none' );
-		echo '<select name="pw_health_score_action">';
-		echo '<option value="none" ' . selected( $value, 'none', false ) . '>' . __( 'Aucune (Alerte seulement)', 'postal-warmup' ) . '</option>';
-		echo '<option value="pause" ' . selected( $value, 'pause', false ) . '>' . __( 'Mettre le serveur en pause', 'postal-warmup' ) . '</option>';
-		echo '<option value="reduce_50" ' . selected( $value, 'reduce_50', false ) . '>' . __( 'Réduire le volume de 50%', 'postal-warmup' ) . '</option>';
-		echo '</select>';
+	public function get_tabs_config() {
+		return [
+			'general' => [
+				'label' => __( 'Général', 'postal-warmup' ),
+				'fields' => [
+					'global_tag' => [ 'label' => __( 'Tag Global', 'postal-warmup' ), 'type' => 'text', 'desc' => __( 'Tag ajouté à tous les emails.', 'postal-warmup' ) ],
+					'enable_logging' => [ 'label' => __( 'Activer les Logs', 'postal-warmup' ), 'type' => 'checkbox' ],
+					'disable_ip_logging' => [ 'label' => __( 'Désactiver IP Log', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Conformité RGPD', 'postal-warmup' ) ],
+				]
+			],
+			'security' => [
+				'label' => __( 'Sécurité', 'postal-warmup' ),
+				'fields' => [
+					'webhook_strict_mode' => [ 'label' => __( 'Webhook Strict Mode', 'postal-warmup' ), 'type' => 'checkbox' ],
+					'nonce_expiration' => [ 'label' => __( 'Expiration Nonce (h)', 'postal-warmup' ), 'type' => 'number' ],
+					'mask_api_keys_ui' => [ 'label' => __( 'Masquer API Keys (UI)', 'postal-warmup' ), 'type' => 'checkbox' ],
+					'required_capability' => [
+						'label' => __( 'Permission Requise', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'manage_options' => 'Admins', 'manage_postal_warmup' => 'Warmup Managers' ]
+					],
+				]
+			],
+			'queue' => [
+				'label' => __( 'File d\'attente', 'postal-warmup' ),
+				'fields' => [
+					'queue_batch_size' => [ 'label' => __( 'Taille du lot', 'postal-warmup' ), 'type' => 'number' ],
+					'queue_interval' => [ 'label' => __( 'Intervalle (min)', 'postal-warmup' ), 'type' => 'number' ],
+					'queue_locking_enabled' => [ 'label' => __( 'Verrouillage Queue', 'postal-warmup' ), 'type' => 'checkbox' ],
+					'queue_lock_timeout' => [ 'label' => __( 'Timeout Verrou (s)', 'postal-warmup' ), 'type' => 'number' ],
+					'max_retries' => [ 'label' => __( 'Max Tentatives', 'postal-warmup' ), 'type' => 'number' ],
+					'retry_strategy' => [
+						'label' => __( 'Stratégie Retry', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'fixed' => 'Fixe', 'exponential' => 'Exponentielle', 'linear' => 'Linéaire' ]
+					],
+				]
+			],
+			'performance' => [
+				'label' => __( 'Performance', 'postal-warmup' ),
+				'fields' => [
+					'enable_transient_cache' => [ 'label' => __( 'Activer Cache', 'postal-warmup' ), 'type' => 'checkbox' ],
+					'db_query_limit' => [ 'label' => __( 'Limite Résultats DB', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Max rows per query', 'postal-warmup' ) ],
+					'api_timeout' => [ 'label' => __( 'API Timeout (sec)', 'postal-warmup' ), 'type' => 'number' ],
+					'db_transactions' => [ 'label' => __( 'DB Transactions', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Recommandé pour la concurrence.', 'postal-warmup' ) ],
+				]
+			],
+			'interface' => [
+				'label' => __( 'Interface', 'postal-warmup' ),
+				'fields' => [
+					'default_sort_column' => [
+						'label' => __( 'Tri par défaut', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'id' => 'ID', 'domain' => 'Domaine', 'sent_count' => 'Envois', 'success_count' => 'Succès' ]
+					],
+					'default_sort_order' => [
+						'label' => __( 'Ordre par défaut', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'ASC' => 'Croissant', 'DESC' => 'Décroissant' ]
+					],
+					'dashboard_refresh' => [ 'label' => __( 'Rafraîchissement Dashboard (s)', 'postal-warmup' ), 'type' => 'number' ],
+				]
+			],
+			'notifications' => [
+				'label' => __( 'Notifications', 'postal-warmup' ),
+				'fields' => [
+					'notify_email' => [ 'label' => __( 'Email Notifications', 'postal-warmup' ), 'type' => 'email' ],
+					'notify_on_error' => [ 'label' => __( 'Alerte Erreurs', 'postal-warmup' ), 'type' => 'checkbox' ],
+				]
+			],
+		];
 	}
 
-	public function smart_routing_enabled_field() {
-		$value = get_option( 'pw_smart_routing_enabled', true );
-		echo '<label><input type="checkbox" name="pw_smart_routing_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Activer la Rotation Intelligente', 'postal-warmup' ) . '</label>';
-		echo '<p class="description">' . __( 'Si activé, les erreurs sur un ISP spécifique (ex: Gmail) n\'affecteront pas les envois vers les autres ISPs.', 'postal-warmup' ) . '</p>';
+	public function section_callback( $args ) {
+		// echo '<p>Description for section</p>';
 	}
 
-	public function smart_routing_error_threshold_field() {
-		$value = get_option( 'pw_smart_routing_error_threshold', 5 );
-		echo '<input type="number" name="pw_smart_routing_error_threshold" value="' . esc_attr( $value ) . '" class="small-text" min="1" max="100"> ' . __( '% d\'erreurs', 'postal-warmup' );
+	public function render_field( $args ) {
+		$options = get_option( $this->option_name, $this->defaults );
+		if(!is_array($options)) $options = $this->defaults;
+
+		$id = $args['id'];
+		$value = isset( $options[$id] ) ? $options[$id] : ( $this->defaults[$id] ?? '' );
+		$name = $this->option_name . '[' . $id . ']';
+
+		switch ( $args['type'] ) {
+			case 'text':
+			case 'email':
+			case 'number':
+				echo '<input type="' . $args['type'] . '" name="' . $name . '" value="' . esc_attr( $value ) . '" class="regular-text">';
+				break;
+			case 'checkbox':
+				echo '<input type="checkbox" name="' . $name . '" value="1" ' . checked( $value, true, false ) . '>';
+				break;
+			case 'select':
+				echo '<select name="' . $name . '">';
+				foreach ( $args['options'] as $opt_val => $opt_label ) {
+					echo '<option value="' . esc_attr( $opt_val ) . '" ' . selected( $value, $opt_val, false ) . '>' . esc_html( $opt_label ) . '</option>';
+				}
+				echo '</select>';
+				break;
+		}
+
+		if ( ! empty( $args['desc'] ) ) {
+			echo '<p class="description">' . esc_html( $args['desc'] ) . '</p>';
+		}
 	}
 
-	public function smart_routing_cooldown_field() {
-		$value = get_option( 'pw_smart_routing_cooldown', 60 );
-		echo '<input type="number" name="pw_smart_routing_cooldown" value="' . esc_attr( $value ) . '" class="small-text" min="1"> ' . __( 'minutes', 'postal-warmup' );
-	}
+	public static function get( $key, $default_override = null ) {
+		$options = get_option( 'pw_settings' );
 
-	public function reputation_monitoring_enabled_field() {
-		$value = get_option( 'pw_reputation_monitoring_enabled', true );
-		echo '<label><input type="checkbox" name="pw_reputation_monitoring_enabled" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Surveiller les chutes de réputation', 'postal-warmup' ) . '</label>';
-	}
+		if ( $options && isset( $options[$key] ) ) {
+			return $options[$key];
+		}
 
-	public function reputation_drop_sensitivity_field() {
-		$value = get_option( 'pw_reputation_drop_sensitivity', 20 );
-		echo '<input type="number" name="pw_reputation_drop_sensitivity" value="' . esc_attr( $value ) . '" class="small-text" min="1" max="100"> ' . __( '% de baisse', 'postal-warmup' );
-		echo '<p class="description">' . __( 'Déclenche une alerte si le taux d\'ouverture chute de ce pourcentage par rapport à la moyenne.', 'postal-warmup' ) . '</p>';
-	}
-
-	// === White Label Callbacks ===
-
-	public function whitelabel_section_callback() { echo '<p>' . __( 'Personnalisez l\'apparence du plugin pour vos clients (Marque Blanche).', 'postal-warmup' ) . '</p>'; }
-
-	public function wl_menu_name_field() {
-		$value = get_option( 'pw_wl_menu_name', 'Postal Warmup' );
-		echo '<input type="text" name="pw_wl_menu_name" value="' . esc_attr( $value ) . '" class="regular-text">';
-	}
-
-	public function wl_menu_icon_field() {
-		$value = get_option( 'pw_wl_menu_icon', 'dashicons-email-alt' );
-		echo '<input type="text" name="pw_wl_menu_icon" value="' . esc_attr( $value ) . '" class="regular-text">';
-		echo '<p class="description">' . __( 'Nom de l\'icône Dashicon (ex: dashicons-chart-line, dashicons-email-alt). <a href="https://developer.wordpress.org/resource/dashicons/" target="_blank">Voir la liste</a>', 'postal-warmup' ) . '</p>';
-	}
-
-	public function wl_hide_footer_field() {
-		$value = get_option( 'pw_wl_hide_footer', false );
-		echo '<label><input type="checkbox" name="pw_wl_hide_footer" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Masquer les mentions du plugin dans le footer admin', 'postal-warmup' ) . '</label>';
-	}
-
-	public function wl_custom_css_field() {
-		$value = get_option( 'pw_wl_custom_css', '' );
-		echo '<textarea name="pw_wl_custom_css" rows="5" cols="50" class="large-text code">' . esc_textarea( $value ) . '</textarea>';
-		echo '<p class="description">' . __( 'Ce CSS sera chargé sur toutes les pages du plugin.', 'postal-warmup' ) . '</p>';
-	}
-
-	// === DomScan Callbacks ===
-
-	public function domscan_section_callback() {
-		echo '<p>' . __( 'Intégrez DomScan pour auditer automatiquement la santé et la réputation de vos domaines.', 'postal-warmup' ) . '</p>';
-		echo '<p class="description"><a href="https://domscan.net/fr/apis" target="_blank">' . __( 'Obtenir une clé API DomScan', 'postal-warmup' ) . '</a></p>';
-	}
-
-	public function domscan_api_key_field() {
-		$value = get_option( 'pw_domscan_api_key', '' );
-		echo '<input type="text" name="pw_domscan_api_key" value="' . esc_attr( $value ) . '" class="regular-text" placeholder="sk_...">';
-		echo '<p class="description">' . __( 'Requis pour les audits automatiques.', 'postal-warmup' ) . '</p>';
-	}
-
-	public function domscan_tools_field() {
-		$tools = get_option( 'pw_domscan_tools', [ 'health', 'blacklist', 'reputation' ] );
-		if ( ! is_array( $tools ) ) $tools = [];
-
-		$available = [
-			'health' => __( 'Santé du Domaine (DNS, Config)', 'postal-warmup' ),
-			'blacklist' => __( 'Vérification Blacklist (RBL)', 'postal-warmup' ),
-			'reputation' => __( 'Score de Réputation', 'postal-warmup' ),
-			'ssl' => __( 'Analyse SSL', 'postal-warmup' ),
+		// Fallbacks for critical values if DB is empty/corrupt
+		$defaults = [
+			'queue_batch_size' => 20,
+			'db_query_limit' => 500,
+			'default_sort_column' => 'sent_count',
+			'default_sort_order' => 'DESC',
+			'api_timeout' => 15,
 		];
 
-		echo '<fieldset>';
-		foreach ( $available as $key => $label ) {
-			$checked = in_array( $key, $tools ) ? 'checked="checked"' : '';
-			echo '<label style="display:block; margin-bottom: 5px;">';
-			echo '<input type="checkbox" name="pw_domscan_tools[]" value="' . esc_attr( $key ) . '" ' . $checked . '> ' . esc_html( $label );
-			echo '</label>';
-		}
-		echo '</fieldset>';
-	}
-
-	public function sanitize_domscan_tools( $input ) {
-		if ( ! is_array( $input ) ) return [];
-		return array_map( 'sanitize_text_field', $input );
+		return $default_override ?? ($defaults[$key] ?? null);
 	}
 }

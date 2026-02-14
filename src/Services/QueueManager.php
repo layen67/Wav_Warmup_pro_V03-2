@@ -11,6 +11,7 @@ use PostalWarmup\Models\Stats;
 use PostalWarmup\Models\Strategy;
 use PostalWarmup\Services\StrategyEngine;
 use PostalWarmup\Admin\ISPManager;
+use PostalWarmup\Admin\Settings;
 
 class QueueManager {
 
@@ -55,19 +56,39 @@ class QueueManager {
      * Traite la file d'attente (Appelé par CRON)
      */
     public static function process_queue() {
+        // Queue Locking
+        if ( Settings::get( 'queue_locking_enabled', true ) ) {
+            if ( get_transient( 'pw_queue_lock' ) ) {
+                return; // Locked by another process
+            }
+            set_transient( 'pw_queue_lock', true, Settings::get( 'queue_lock_timeout', 60 ) );
+        }
+
+        try {
+            self::do_process_queue();
+        } finally {
+            // Always release lock
+            if ( Settings::get( 'queue_locking_enabled', true ) ) {
+                delete_transient( 'pw_queue_lock' );
+            }
+        }
+    }
+
+    private static function do_process_queue() {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_queue';
         
         // 1. Load Settings
-        $settings = get_option('pw_warmup_settings', []);
-        $global_tz = wp_timezone_string(); // Use WP default timezone if not set in template
-        // Authorized hours (Global setting)
-        $slots = !empty($settings['schedule']) ? array_map('intval', $settings['schedule']) : range(9, 18); // Default 9h-18h
+        $settings = get_option('pw_warmup_settings', []); // Legacy sending window settings? Or migrate to Settings::get?
+        // Phase 4: Sending Rules -> Settings. "Sending window start/end".
+        // For now, let's keep legacy logic but use Settings::get for batch size.
+        $global_tz = wp_timezone_string();
+        $slots = !empty($settings['schedule']) ? array_map('intval', $settings['schedule']) : range(9, 18);
 
         // 2. Fetch Pending Items
         $now_mysql = current_time( 'mysql' );
-        // Process in batches
-        $batch_size = (int) get_option( 'pw_queue_batch_size', 20 );
+        $batch_size = (int) Settings::get( 'queue_batch_size', 20 );
+
         $items = $wpdb->get_results( $wpdb->prepare( 
             "SELECT * FROM $table WHERE status = 'pending' AND scheduled_at <= %s LIMIT %d",
             $now_mysql,
@@ -163,7 +184,9 @@ class QueueManager {
                 $item['to_email'], 
                 $domain, 
                 $prefix, 
-                $server['id']
+                $server['id'],
+                0, // retry_count
+                false // handle_retry (We handle it here in DB)
             );
             
             $success = isset( $result['success'] ) && $result['success'];
@@ -175,7 +198,6 @@ class QueueManager {
                     'attempts' => $item['attempts'] + 1
                 ], [ 'id' => $id ] );
                 
-                // Log detailed success
                 Logger::info("Queue: Sent Item $id", [
                     'server' => $domain,
                     'isp' => $isp,
@@ -183,24 +205,58 @@ class QueueManager {
                     'day' => $server['lb_metrics']['warmup_day'] ?? '?'
                 ]);
 
-                // Hook: Item Sent (Audit Req)
                 do_action( 'pw_queue_item_sent', $id, $item, $server );
 
             } else {
-                $wpdb->update( $table, [ 
-                    'status' => 'failed', 
-                    'error_message' => $result['error'] ?? 'Unknown error',
-                    'updated_at' => current_time( 'mysql' ),
-                    'attempts' => $item['attempts'] + 1
-                ], [ 'id' => $id ] );
+                // Retry Logic
+                $attempts = $item['attempts'] + 1;
+                $max_retries = (int) Settings::get( 'max_retries', 3 );
                 
-                Logger::error("Queue: Failed Item $id", [
-                    'server' => $domain,
-                    'error' => $result['error'] ?? 'Unknown'
-                ]);
+                if ( $attempts < $max_retries ) {
+                    // Calculate Delay
+                    $base = (int) Settings::get( 'retry_delay_base', 60 );
+                    $strategy = Settings::get( 'retry_strategy', 'fixed' );
+                    $max_delay = (int) Settings::get( 'retry_delay_max', 900 );
 
-                // Hook: Item Failed (Webhook/Audit)
-                do_action( 'pw_queue_item_failed', $id, $item, $result['error'] ?? 'Unknown' );
+                    $delay = $base;
+                    if ( $strategy === 'linear' ) {
+                        $delay = $base * $attempts;
+                    } elseif ( $strategy === 'exponential' ) {
+                        $delay = $base * pow( 2, $attempts ); // 60, 120, 240...
+                    }
+
+                    if ( $delay > $max_delay ) $delay = $max_delay;
+
+                    $next_try = date( 'Y-m-d H:i:s', current_time( 'timestamp' ) + $delay );
+
+                    $wpdb->update( $table, [
+                        'status' => 'pending', // Re-queue
+                        'scheduled_at' => $next_try,
+                        'updated_at' => current_time( 'mysql' ),
+                        'attempts' => $attempts,
+                        'error_message' => $result['error'] ?? 'Retry scheduled'
+                    ], [ 'id' => $id ] );
+
+                    Logger::warning("Queue: Item $id failed, retrying in {$delay}s (Attempt $attempts/$max_retries)", [
+                        'error' => $result['error'] ?? 'Unknown'
+                    ]);
+
+                } else {
+                    // Hard Fail
+                    $wpdb->update( $table, [
+                        'status' => 'failed',
+                        'error_message' => $result['error'] ?? 'Unknown error',
+                        'updated_at' => current_time( 'mysql' ),
+                        'attempts' => $attempts
+                    ], [ 'id' => $id ] );
+
+                    Logger::error("Queue: Failed Item $id (Max retries reached)", [
+                        'server' => $domain,
+                        'error' => $result['error'] ?? 'Unknown'
+                    ]);
+
+                    do_action( 'pw_queue_item_failed', $id, $item, $result['error'] ?? 'Unknown' );
+                }
             }
 
             // 7. Update V3 Stats (Tracking)

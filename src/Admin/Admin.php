@@ -8,6 +8,7 @@ use PostalWarmup\Services\Logger;
 use PostalWarmup\Services\Encryption;
 use PostalWarmup\API\Sender;
 use PostalWarmup\API\Client;
+use PostalWarmup\Admin\Settings;
 
 /**
  * Classe de l'interface d'administration
@@ -46,7 +47,10 @@ class Admin {
 	}
 
 	public function enqueue_styles( $hook ) {
-		if ( strpos( $hook, 'postal-warmup' ) === false ) return;
+		// Asset Optimization
+		if ( Settings::get( 'assets_load_optimization', true ) ) {
+			if ( strpos( $hook, 'postal-warmup' ) === false ) return;
+		}
 		
 		$is_dev = defined('WP_DEBUG') && WP_DEBUG === true;
 		$script_version = $is_dev ? time() : WARMUP_PRO_VERSION;
@@ -70,7 +74,10 @@ class Admin {
 	}
 
 	public function enqueue_scripts( $hook ) {
-		if ( strpos( $hook, 'postal-warmup' ) === false ) return;
+		// Asset Optimization
+		if ( Settings::get( 'assets_load_optimization', true ) ) {
+			if ( strpos( $hook, 'postal-warmup' ) === false ) return;
+		}
 		
 		$is_dev = defined('WP_DEBUG') && WP_DEBUG === true;
 		$script_version = $is_dev ? time() : WARMUP_PRO_VERSION;

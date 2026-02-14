@@ -209,6 +209,10 @@ class Logger {
 			
 			// Sleep removed as per requirements
 		} while ( $rows_affected >= $batch_size );
+
+		if ( Settings::get( 'db_optimize_on_purge', true ) ) {
+			$wpdb->query( "OPTIMIZE TABLE $table" );
+		}
 	}
 
 	private static function mask_context( $context ) {

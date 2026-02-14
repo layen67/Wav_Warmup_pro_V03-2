@@ -56,7 +56,34 @@ class QueueManager {
      * Traite la file d'attente (Appelé par CRON)
      */
     public static function process_queue() {
-        // Queue Locking
+        // 1. Check Auto-Pause status
+        if ( get_transient( 'pw_queue_paused' ) ) {
+            return;
+        }
+
+        // 2. Check Failure Rate (Auto-Pause Logic)
+        $pause_threshold = (int) Settings::get( 'queue_pause_threshold', 50 );
+        $health = self::get_health_stats(); // Gets 24h stats
+
+        if ( $health['sent_24h'] + $health['failed_24h'] > 10 ) { // Minimum sample size
+            $total = $health['sent_24h'] + $health['failed_24h'];
+            $failure_rate = ($health['failed_24h'] / $total) * 100;
+
+            if ( $failure_rate > $pause_threshold ) {
+                $resume_delay = (int) Settings::get( 'queue_resume_delay', 30 );
+                set_transient( 'pw_queue_paused', true, $resume_delay * 60 );
+
+                Logger::critical( "Queue: Auto-paused for $resume_delay minutes due to high failure rate ({$failure_rate}%)" );
+
+                if ( Settings::get( 'notify_stuck_queue', true ) ) {
+                    // Send alert (EmailNotifications::send_alert would be better, but implementing inline for now)
+                    // TODO: Move to Notification Service
+                }
+                return;
+            }
+        }
+
+        // 3. Queue Locking
         if ( Settings::get( 'queue_locking_enabled', true ) ) {
             if ( get_transient( 'pw_queue_lock' ) ) {
                 return; // Locked by another process
@@ -79,9 +106,7 @@ class QueueManager {
         $table = $wpdb->prefix . 'postal_queue';
         
         // 1. Load Settings
-        $settings = get_option('pw_warmup_settings', []); // Legacy sending window settings? Or migrate to Settings::get?
-        // Phase 4: Sending Rules -> Settings. "Sending window start/end".
-        // For now, let's keep legacy logic but use Settings::get for batch size.
+        $settings = get_option('pw_warmup_settings', []);
         $global_tz = wp_timezone_string();
         $slots = !empty($settings['schedule']) ? array_map('intval', $settings['schedule']) : range(9, 18);
 

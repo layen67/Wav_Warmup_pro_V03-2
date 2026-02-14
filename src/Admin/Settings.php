@@ -39,6 +39,8 @@ class Settings {
 		'retry_delay_base' => 60,
 		'retry_delay_max' => 900,
 		'cron_method' => 'wp_cron',
+		'queue_pause_threshold' => 50, // % failure rate
+		'queue_resume_delay' => 30, // minutes
 
 		// Warmup
 		'warmup_mode' => 'linear',
@@ -52,16 +54,20 @@ class Settings {
 
 		// Performance
 		'enable_transient_cache' => true,
+		'cache_backend' => 'auto', // auto, transient, redis
 		'cache_ttl_server' => 300,
 		'cache_ttl_stats' => 600,
 		'cache_ttl_api' => 300,
 		'auto_purge_queue_days' => 90,
 		'auto_purge_logs_days' => 30,
+		'db_purge_schedule' => 'daily', // daily, weekly
+		'db_optimize_on_purge' => true,
 		'log_max_file_size' => 10,
 		'log_auto_purge_deactivation' => false,
 		'api_timeout' => 15,
 		'db_query_limit' => 500,
 		'db_transactions' => true,
+		'assets_load_optimization' => true,
 
 		// Interface
 		'dashboard_refresh' => 30,
@@ -262,12 +268,27 @@ class Settings {
 						'type' => 'select',
 						'options' => [ 'fixed' => 'Fixe', 'exponential' => 'Exponentielle', 'linear' => 'Linéaire' ]
 					],
+					'queue_pause_threshold' => [ 'label' => __( 'Seuil Pause Auto (%)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Si > X% d\'échecs.', 'postal-warmup' ) ],
+					'queue_resume_delay' => [ 'label' => __( 'Délai Reprise (min)', 'postal-warmup' ), 'type' => 'number' ],
 				]
 			],
 			'performance' => [
 				'label' => __( 'Performance', 'postal-warmup' ),
 				'fields' => [
 					'enable_transient_cache' => [ 'label' => __( 'Activer Cache', 'postal-warmup' ), 'type' => 'checkbox' ],
+					'cache_backend' => [
+						'label' => __( 'Backend Cache', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'auto' => 'Auto', 'transient' => 'Transients WP', 'redis' => 'Redis/Memcached' ]
+					],
+					'cache_ttl_api' => [ 'label' => __( 'TTL Cache API (s)', 'postal-warmup' ), 'type' => 'number' ],
+					'db_purge_schedule' => [
+						'label' => __( 'Fréquence Nettoyage', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'daily' => 'Quotidien', 'weekly' => 'Hebdomadaire' ]
+					],
+					'db_optimize_on_purge' => [ 'label' => __( 'Optimiser Tables', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Run OPTIMIZE TABLE after purge.', 'postal-warmup' ) ],
+					'assets_load_optimization' => [ 'label' => __( 'Optimiser Assets', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Charger CSS/JS uniquement sur les pages du plugin.', 'postal-warmup' ) ],
 					'db_query_limit' => [ 'label' => __( 'Limite Résultats DB', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Max rows per query', 'postal-warmup' ) ],
 					'api_timeout' => [ 'label' => __( 'API Timeout (sec)', 'postal-warmup' ), 'type' => 'number' ],
 					'db_transactions' => [ 'label' => __( 'DB Transactions', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Recommandé pour la concurrence.', 'postal-warmup' ) ],

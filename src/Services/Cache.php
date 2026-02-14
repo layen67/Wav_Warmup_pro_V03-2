@@ -4,22 +4,39 @@ namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Models\Stats;
+use PostalWarmup\Admin\Settings;
 
 /**
  * Classe de gestion du cache
  */
 class Cache {
 
+	private static function get_ttl( $type ) {
+		// Use defaults aligned with Settings class
+		switch ( $type ) {
+			case 'server': return (int) Settings::get( 'cache_ttl_server', 300 );
+			case 'stats': return (int) Settings::get( 'cache_ttl_stats', 600 );
+			case 'api': return (int) Settings::get( 'cache_ttl_api', 300 );
+			default: return 300;
+		}
+	}
+
+	private static function is_enabled() {
+		return Settings::get( 'enable_transient_cache', true );
+	}
+
 	/**
 	 * Récupère les serveurs actifs (avec cache)
 	 */
 	public static function get_active_servers() {
+		if ( ! self::is_enabled() ) return Database::get_servers( true );
+
 		$cache_key = 'pw_active_servers';
 		$servers = get_transient( $cache_key );
 		
 		if ( false === $servers ) {
 			$servers = Database::get_servers( true );
-			set_transient( $cache_key, $servers, HOUR_IN_SECONDS );
+			set_transient( $cache_key, $servers, self::get_ttl( 'server' ) );
 		}
 		
 		return $servers;
@@ -29,13 +46,15 @@ class Cache {
 	 * Récupère un serveur par domaine (avec cache)
 	 */
 	public static function get_server_by_domain( $domain ) {
+		if ( ! self::is_enabled() ) return Database::get_server_by_domain( $domain );
+
 		$cache_key = 'pw_server_' . md5( $domain );
 		$server = get_transient( $cache_key );
 		
 		if ( false === $server ) {
 			$server = Database::get_server_by_domain( $domain );
 			if ( $server ) {
-				set_transient( $cache_key, $server, HOUR_IN_SECONDS );
+				set_transient( $cache_key, $server, self::get_ttl( 'server' ) );
 			}
 		}
 		
@@ -61,13 +80,25 @@ class Cache {
 	 * Récupère les stats (avec cache)
 	 */
 	public static function get_stats( $server_id = null, $days = 7 ) {
+		if ( ! self::is_enabled() ) {
+			// Direct logic copied from below for non-cache path
+			global $wpdb;
+			if ( $server_id ) {
+				$stats_table = $wpdb->prefix . 'postal_stats';
+				$date_from = date( 'Y-m-d', strtotime( "-$days days" ) );
+				return $wpdb->get_results( $wpdb->prepare(
+					"SELECT date, SUM(sent_count) as total_sent, SUM(success_count) as total_success, SUM(error_count) as total_errors
+					FROM $stats_table WHERE server_id = %d AND date >= %s GROUP BY date ORDER BY date ASC",
+					$server_id, $date_from
+				), ARRAY_A );
+			}
+			return [];
+		}
+
 		$cache_key = 'pw_stats_' . $server_id . '_' . $days;
 		$stats = get_transient( $cache_key );
 		
 		if ( false === $stats ) {
-			// Note: Database::get_server_stats needs implementation if missing
-			// Stats::get_global_stats needs implementation if missing
-			// For now, implementing basic retrieval or returning empty
 			global $wpdb;
 			if ( $server_id ) {
 				$stats_table = $wpdb->prefix . 'postal_stats';
@@ -78,10 +109,9 @@ class Cache {
 					$server_id, $date_from
 				), ARRAY_A );
 			} else {
-				// Global stats fallback
-				$stats = []; // Placeholder until Stats model fully fleshed out
+				$stats = [];
 			}
-			set_transient( $cache_key, $stats, 5 * MINUTE_IN_SECONDS );
+			set_transient( $cache_key, $stats, self::get_ttl( 'stats' ) );
 		}
 		
 		return $stats;

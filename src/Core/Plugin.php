@@ -25,6 +25,19 @@ class Plugin {
 		$this->define_admin_hooks();
 		$this->define_api_hooks();
 		$this->define_cron_hooks();
+		$this->define_security_hooks();
+	}
+
+	private function define_security_hooks() {
+		$this->loader->add_filter( 'nonce_life', $this, 'filter_nonce_life' );
+	}
+
+	public function filter_nonce_life( $seconds ) {
+		$hours = (int) Settings::get( 'nonce_expiration', 12 );
+		if ( $hours > 0 ) {
+			return $hours * 3600;
+		}
+		return $seconds;
 	}
 
 	private function set_locale() {

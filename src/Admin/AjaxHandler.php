@@ -8,15 +8,24 @@ use PostalWarmup\Services\Logger;
 use PostalWarmup\API\Sender;
 use PostalWarmup\API\Client;
 use PostalWarmup\Admin\TemplateManager;
+use PostalWarmup\Admin\Settings;
 
 /**
  * Gestionnaire des requêtes AJAX
  */
 class AjaxHandler {
 
+	private function check_permission() {
+		$cap = Settings::get( 'required_capability', 'manage_options' );
+		if ( ! current_user_can( $cap ) ) {
+			wp_send_json_error( [ 'message' => 'Forbidden' ] );
+			exit;
+		}
+	}
+
 	public function ajax_test_server() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		try {
 			$server_id = (int) $_POST['server_id'];
@@ -35,7 +44,7 @@ class AjaxHandler {
 
 	public function ajax_regenerate_secret() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		$secret = wp_generate_password( 64, false );
 		update_option( 'pw_webhook_secret', $secret );
 		wp_send_json_success( [ 'secret' => $secret, 'message' => __( 'Secret régénéré.', 'postal-warmup' ) ] );
@@ -43,7 +52,7 @@ class AjaxHandler {
 
 	public function ajax_get_dashboard_data() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		$days = isset( $_POST['days'] ) ? (int) $_POST['days'] : 7;
 		
@@ -62,21 +71,21 @@ class AjaxHandler {
 
 	public function ajax_clear_logs() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		Logger::clear_all_logs();
 		wp_send_json_success( [ 'message' => __( 'Logs supprimés.', 'postal-warmup' ) ] );
 	}
 
 	public function ajax_get_all_templates() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		wp_send_json_success( [ 'templates' => TemplateManager::get_all_with_meta() ] );
 	}
 
 	public function ajax_save_template() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
-		
+		$this->check_permission();
+
 		// Fix: Unslash POST data before processing to prevent backslash accumulation
 		$variants = isset($_POST['variants']) ? wp_unslash($_POST['variants']) : [];
 
@@ -107,7 +116,7 @@ class AjaxHandler {
 
 	public function ajax_delete_template() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		$result = TemplateManager::delete_template( sanitize_text_field( $_POST['name'] ) );
 		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
 		else wp_send_json_success();
@@ -115,7 +124,7 @@ class AjaxHandler {
 
 	public function ajax_duplicate_template() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		$name = sanitize_text_field( $_POST['name'] ?? '' );
 		$new_name = sanitize_text_field( $_POST['new_name'] ?? '' );
@@ -131,7 +140,7 @@ class AjaxHandler {
 	
 	public function ajax_get_template() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		$tpl = TemplateManager::get_template( sanitize_text_field( $_POST['name'] ) );
 		if ( $tpl ) wp_send_json_success( $tpl );
 		else wp_send_json_error( [ 'message' => 'Not found' ] );
@@ -139,7 +148,7 @@ class AjaxHandler {
 
 	public function ajax_get_template_stats() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		$name = sanitize_text_field( $_POST['template_name'] );
 		$days = isset( $_POST['days'] ) ? (int) $_POST['days'] : 30;
@@ -151,7 +160,7 @@ class AjaxHandler {
 
 	public function ajax_save_category() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		$id = TemplateManager::save_category( 
 			sanitize_text_field( $_POST['name'] ), 
 			(int)$_POST['parent_id'], 
@@ -163,48 +172,48 @@ class AjaxHandler {
 
 	public function ajax_delete_category() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		TemplateManager::delete_category( (int)$_POST['id'] );
 		wp_send_json_success();
 	}
 
 	public function ajax_get_categories() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		wp_send_json_success( [ 'tree' => TemplateManager::get_folders_tree() ] );
 	}
 
 	public function ajax_toggle_favorite() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		TemplateManager::toggle_favorite( (int)$_POST['template_id'], filter_var( $_POST['favorite'], FILTER_VALIDATE_BOOLEAN ) );
 		wp_send_json_success();
 	}
 
 	public function ajax_move_template() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		TemplateManager::move_template( (int)$_POST['template_id'], (int)$_POST['folder_id'] );
 		wp_send_json_success();
 	}
 
 	public function ajax_update_template_status() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		TemplateManager::update_status( (int)$_POST['template_id'], sanitize_key( $_POST['status'] ) );
 		wp_send_json_success();
 	}
 
 	public function ajax_get_template_versions() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		$versions = TemplateManager::get_versions( (int)$_POST['template_id'] );
 		wp_send_json_success( [ 'versions' => $versions ] );
 	}
 
 	public function ajax_restore_template_version() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		$result = TemplateManager::restore_version( (int)$_POST['version_id'] );
 		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
 		else wp_send_json_success();
@@ -212,7 +221,7 @@ class AjaxHandler {
 
 	public function ajax_clear_cache() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		global $wpdb;
 		$wpdb->query( "DELETE FROM $wpdb->options WHERE option_name LIKE '_transient_pw_%'" );
@@ -223,7 +232,7 @@ class AjaxHandler {
 
 	public function ajax_export_stats() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 
 		global $wpdb;
 		$stats_table = $wpdb->prefix . 'postal_stats';
@@ -254,19 +263,19 @@ class AjaxHandler {
 
 	public function ajax_reorder_templates() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		wp_send_json_success();
 	}
 
 	public function ajax_bulk_action_templates() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		wp_send_json_success();
 	}
 
 	public function ajax_export_template() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 
 		$name = sanitize_text_field( $_POST['name'] );
 		$template = TemplateManager::get_template( $name );
@@ -284,7 +293,7 @@ class AjaxHandler {
 
 	public function ajax_import_templates() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 
 		$file = $_FILES['file'] ?? ( $_FILES['import_file'] ?? null );
 
@@ -328,7 +337,7 @@ class AjaxHandler {
 
 	public function ajax_get_suppression_list() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		$server_id = (int) $_POST['server_id'];
 		$result = Client::request( $server_id, 'suppressions' );
@@ -339,7 +348,7 @@ class AjaxHandler {
 
 	public function ajax_delete_suppression() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		$server_id = (int) $_POST['server_id'];
 		$email = sanitize_email( $_POST['email'] );
@@ -352,7 +361,7 @@ class AjaxHandler {
 
 	public function ajax_get_server_health() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		$server_id = (int) $_POST['server_id'];
 		$start = microtime( true );
@@ -368,7 +377,7 @@ class AjaxHandler {
 
 	public function ajax_get_advanced_stats() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 
 		$days = isset( $_POST['days'] ) ? (int) $_POST['days'] : 30;
 
@@ -380,7 +389,7 @@ class AjaxHandler {
 
 	public function ajax_get_stats_table() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 
 		// Deprecated for new accordion, but kept if needed for fallback? 
 		// Actually, we replace it with get_server_detail as per plan.
@@ -392,7 +401,7 @@ class AjaxHandler {
 
 	public function ajax_get_server_detail() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 
 		$server_id = (int) $_POST['server_id'];
 		$days = isset( $_POST['days'] ) ? (int) $_POST['days'] : 30;
@@ -406,7 +415,7 @@ class AjaxHandler {
 
 	public function ajax_process_queue_manual() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		\PostalWarmup\Services\QueueManager::process_queue();
 		
@@ -415,7 +424,7 @@ class AjaxHandler {
 
 	public function ajax_save_isp() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		// Map $_POST to ISPManager::save expected format
 		// Note: The form sends 'isp_label', 'domains' (string), etc.
@@ -428,7 +437,7 @@ class AjaxHandler {
 
 	public function ajax_delete_isp() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		ISPManager::delete( (int)$_POST['id'] );
 		wp_send_json_success();
@@ -436,7 +445,7 @@ class AjaxHandler {
 
 	public function ajax_save_strategy() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		$result = StrategyManager::save( $_POST );
 		
@@ -446,7 +455,7 @@ class AjaxHandler {
 
 	public function ajax_delete_strategy() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 		
 		StrategyManager::delete( (int)$_POST['id'] );
 		wp_send_json_success();
@@ -454,7 +463,7 @@ class AjaxHandler {
 
 	public function ajax_test_webhook() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 
 		$url = isset( $_POST['url'] ) ? esc_url_raw( $_POST['url'] ) : '';
 
@@ -478,7 +487,7 @@ class AjaxHandler {
 
 	public function ajax_run_domscan_audit() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_postal_warmup' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 
 		$domain = sanitize_text_field( $_POST['domain'] );
 
@@ -495,7 +504,7 @@ class AjaxHandler {
 
 	public function ajax_render_preview() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+		$this->check_permission();
 
 		$content = isset( $_POST['content'] ) ? wp_unslash( $_POST['content'] ) : '';
 		$context_type = sanitize_key( $_POST['context_type'] ?? 'male' );

@@ -2,6 +2,8 @@
 
 namespace PostalWarmup\Services;
 
+use PostalWarmup\Admin\Settings;
+
 class DomScanService {
 
     private static $api_base = 'https://api.domscan.net/v1';
@@ -10,13 +12,19 @@ class DomScanService {
      * Lance un audit complet pour un domaine
      */
     public static function audit_domain( $domain ) {
-        $api_key = get_option( 'pw_domscan_api_key' );
+        $api_key = Settings::get( 'domscan_api_key' );
 
         if ( empty( $api_key ) ) {
             return new \WP_Error( 'missing_key', 'Clé API DomScan manquante.' );
         }
 
-        $tools = get_option( 'pw_domscan_tools', [ 'health', 'blacklist', 'reputation' ] );
+        $tools = Settings::get( 'domscan_tools', [ 'health', 'blacklist', 'reputation' ] );
+        // Settings::get returns string if sanitized by basic logic, or array?
+        // Our Settings::sanitize_settings relies on types. We didn't define 'domscan_tools' in defaults.
+        // It might not be saved correctly yet in pw_settings.
+        // For Phase 2, we just ensure API key works. Tools might need to be added to Settings defaults if we want them configurable.
+        // I will use default here for now.
+        if ( ! is_array( $tools ) ) $tools = [ 'health', 'blacklist', 'reputation' ];
         $result = [
             'timestamp' => current_time( 'mysql' ),
             'domain' => $domain,

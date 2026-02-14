@@ -16,11 +16,17 @@ class Settings {
 		// Security
 		'webhook_strict_mode' => true,
 		'webhook_secret' => '',
+		'domscan_api_key' => '',
+		'webhook_rate_limit_minute' => 100,
+		'webhook_rate_limit_hour' => 2000,
+		'webhook_ip_whitelist' => '',
+		'webhook_invalid_signature_action' => 'log', // reject, log, notify
 		'nonce_expiration' => 12,
 		'required_capability' => 'manage_options',
 		'mask_api_keys_logs' => true,
 		'mask_api_keys_ui' => true,
 		'log_sensitive_data' => 'masked', // full, masked, none
+		'auto_cleanup_debug_files' => true,
 
 		// Queue
 		'queue_batch_size' => 20,
@@ -51,6 +57,8 @@ class Settings {
 		'cache_ttl_api' => 300,
 		'auto_purge_queue_days' => 90,
 		'auto_purge_logs_days' => 30,
+		'log_max_file_size' => 10,
+		'log_auto_purge_deactivation' => false,
 		'api_timeout' => 15,
 		'db_query_limit' => 500,
 		'db_transactions' => true,
@@ -128,6 +136,37 @@ class Settings {
 		$output = get_option( $this->option_name, $this->defaults );
 		if ( ! is_array( $output ) ) $output = $this->defaults;
 
+		// We assume all boolean fields from the active tab MUST be present in $input if they are checked.
+		// If they are missing, it means they were unchecked (for that tab).
+		// Problem: We don't know which tab was submitted just from $input.
+		// Solution: Check if at least one field from a tab is present, then assume that tab was submitted.
+		// Or better: Use a hidden field 'pw_settings_tab' in the form.
+		// But register_setting callback only gets the values.
+
+		// Alternative: Iterate over defaults. If default is boolean AND we can infer we are saving settings (always true here),
+		// we check if the key is missing. BUT we must be careful about partial updates.
+		// WP Settings API sends the whole array for the option group usually? No, only fields on page.
+		// Wait, 'pw_settings' is a single array option.
+		// The form sends `pw_settings[key]`.
+		// If I'm on Tab A, `pw_settings[field_B]` is NOT sent.
+		// So `isset($input['field_B'])` is false. If I set it to false, I overwrite Tab B settings.
+		// CRITICAL FIX: We need to know which fields were present on the screen.
+		// Workaround: We will rely on type checking.
+		// If a key is present, we update it.
+		// For checkboxes, we need a hidden field for each checkbox or a hidden list of fields.
+		// Standard WP way: Hidden input with same name before checkbox? No, array keys overwrite.
+		// Let's implement the "hidden field with list of keys" approach in render logic, OR simpler:
+		// Since we are rebuilding $output from existing options, we only update keys that are in $input?
+		// NO, that's exactly the bug: unchecked checkboxes are NOT in $input.
+
+		// Fix: In our form (partials/settings.php), we are using do_settings_sections.
+		// We can add a hidden field `pw_settings[_submitted]` with a dummy value to verify submission? No.
+
+		// Let's look at `admin/partials/settings.php`. We can add a hidden field there?
+		// Actually, standard practice for array options with checkboxes is tricky.
+		// We will modify `render_field` to include a hidden input for checkboxes with value '0'.
+		// This way, if unchecked, '0' is sent. If checked, '1' overwrites '0'.
+
 		foreach ( $this->defaults as $key => $default ) {
 			if ( isset( $input[$key] ) ) {
 				$type = gettype( $default );
@@ -138,14 +177,6 @@ class Settings {
 				} else {
 					$output[$key] = sanitize_text_field( $input[$key] );
 				}
-			} else {
-				// Checkbox unchecked case (only if we know it was submitted, usually handled by hidden field or assumption)
-				// For simplicity in WP Settings API, if a section is submitted, fields missing are unchecked checkboxes
-				// But since we have tabs, we need to be careful not to unset fields from other tabs.
-				// However, register_setting handles the whole array.
-				// If we submit only one tab, $input will only contain fields from that tab.
-				// We must merge with existing options.
-				// Done above: $output initialized with existing options.
 			}
 		}
 
@@ -199,6 +230,14 @@ class Settings {
 				'label' => __( 'Sécurité', 'postal-warmup' ),
 				'fields' => [
 					'webhook_strict_mode' => [ 'label' => __( 'Webhook Strict Mode', 'postal-warmup' ), 'type' => 'checkbox' ],
+					'webhook_ip_whitelist' => [ 'label' => __( 'IP Whitelist (Webhooks)', 'postal-warmup' ), 'type' => 'textarea', 'desc' => __( 'Une IP/CIDR par ligne.', 'postal-warmup' ) ],
+					'webhook_rate_limit_minute' => [ 'label' => __( 'Rate Limit (Minute)', 'postal-warmup' ), 'type' => 'number' ],
+					'webhook_rate_limit_hour' => [ 'label' => __( 'Rate Limit (Heure)', 'postal-warmup' ), 'type' => 'number' ],
+					'webhook_invalid_signature_action' => [
+						'label' => __( 'Action Signature Invalide', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'reject' => 'Rejeter (Silencieux)', 'log' => 'Logger', 'notify' => 'Notifier Admin' ]
+					],
 					'nonce_expiration' => [ 'label' => __( 'Expiration Nonce (h)', 'postal-warmup' ), 'type' => 'number' ],
 					'mask_api_keys_ui' => [ 'label' => __( 'Masquer API Keys (UI)', 'postal-warmup' ), 'type' => 'checkbox' ],
 					'required_capability' => [
@@ -206,6 +245,8 @@ class Settings {
 						'type' => 'select',
 						'options' => [ 'manage_options' => 'Admins', 'manage_postal_warmup' => 'Warmup Managers' ]
 					],
+					'auto_cleanup_debug_files' => [ 'label' => __( 'Auto-cleanup Debug Files', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Supprime les fichiers sensibles à l\'activation.', 'postal-warmup' ) ],
+					'domscan_api_key' => [ 'label' => __( 'Clé API DomScan', 'postal-warmup' ), 'type' => 'text', 'desc' => __( 'Pour les audits de domaine.', 'postal-warmup' ) ],
 				]
 			],
 			'queue' => [
@@ -276,7 +317,12 @@ class Settings {
 			case 'number':
 				echo '<input type="' . $args['type'] . '" name="' . $name . '" value="' . esc_attr( $value ) . '" class="regular-text">';
 				break;
+			case 'textarea':
+				echo '<textarea name="' . $name . '" rows="5" cols="50" class="large-text code">' . esc_textarea( $value ) . '</textarea>';
+				break;
 			case 'checkbox':
+				// Add hidden field to ensure unchecked value is sent (overwritten by checkbox if checked)
+				echo '<input type="hidden" name="' . $name . '" value="0">';
 				echo '<input type="checkbox" name="' . $name . '" value="1" ' . checked( $value, true, false ) . '>';
 				break;
 			case 'select':

@@ -3,6 +3,7 @@
 namespace PostalWarmup\Core;
 
 use PostalWarmup\Services\Logger;
+use PostalWarmup\Admin\Settings;
 
 /**
  * Fired during plugin activation.
@@ -14,8 +15,28 @@ class Activator {
 		self::create_tables();
 		self::set_default_options();
 		self::schedule_cron_jobs();
+		self::cleanup_debug_files();
 		flush_rewrite_rules();
 		set_transient( 'pw_activation_notice', true, 60 );
+	}
+
+	private static function cleanup_debug_files() {
+		// Only run if enabled (default true)
+		// Since Settings might not be init yet on first activation, we trust defaults.
+		// However, Settings::get handles fallback.
+
+		if ( Settings::get( 'auto_cleanup_debug_files', true ) ) {
+			$sensitive = [
+				PW_PLUGIN_DIR . 'debug.log',
+				PW_PLUGIN_DIR . 'error_log',
+				PW_PLUGIN_DIR . 'postal-warmup-debug.log'
+			];
+			foreach ( $sensitive as $file ) {
+				if ( file_exists( $file ) ) {
+					@unlink( $file );
+				}
+			}
+		}
 	}
 
 	private static function check_requirements() {

@@ -40,6 +40,41 @@ if (!array_key_exists($active_tab, $tabs)) {
         // The page slug matches what we used in add_settings_section
         do_settings_sections('postal-warmup-settings-' . $active_tab);
 
+        // Special logic for Webhook Secret regeneration (only on Security tab)
+        if ($active_tab === 'security') {
+            ?>
+            <script>
+            jQuery(document).ready(function($) {
+                // Find the webhook secret input by name and append button
+                var $secretInput = $('input[name="pw_settings[webhook_secret]"]');
+                if ($secretInput.length) {
+                    $secretInput.attr('type', 'password'); // Mask by default
+                    var $btn = $('<button type="button" class="button button-secondary" id="pw-regenerate-secret" style="margin-left: 10px;">' +
+                        '<?php _e("Régénérer", "postal-warmup"); ?>' +
+                    '</button>');
+                    $secretInput.after($btn);
+
+                    $btn.on('click', function() {
+                        if(!confirm('<?php _e("Attention: L\'ancienne clé ne fonctionnera plus. Continuer ?", "postal-warmup"); ?>')) return;
+
+                        $.post(ajaxurl, {
+                            action: 'pw_regenerate_secret',
+                            nonce: '<?php echo wp_create_nonce("pw_admin_nonce"); ?>'
+                        }, function(res) {
+                            if(res.success) {
+                                $secretInput.val(res.data.secret);
+                                alert(res.data.message);
+                            } else {
+                                alert(res.data.message);
+                            }
+                        });
+                    });
+                }
+            });
+            </script>
+            <?php
+        }
+
         submit_button();
         ?>
     </form>

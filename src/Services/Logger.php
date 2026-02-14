@@ -108,8 +108,11 @@ class Logger {
 
 			file_put_contents( $file, $line, FILE_APPEND | LOCK_EX );
 
-			// Rotation simple (> 10MB)
-			if ( file_exists( $file ) && filesize( $file ) > 10 * 1024 * 1024 ) {
+			// Rotation simple based on settings
+			$max_mb = (int) Settings::get( 'log_max_file_size', 10 );
+			if ( $max_mb <= 0 ) $max_mb = 10;
+
+			if ( file_exists( $file ) && filesize( $file ) > $max_mb * 1024 * 1024 ) {
 				self::rotate_current_log();
 			}
 		} catch ( \Exception $e ) {

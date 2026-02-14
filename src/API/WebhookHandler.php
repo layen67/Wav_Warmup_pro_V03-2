@@ -8,6 +8,7 @@ use WP_Error;
 use PostalWarmup\Services\Logger;
 use PostalWarmup\Services\QueueManager;
 use PostalWarmup\Models\Database;
+use PostalWarmup\Admin\Settings;
 
 /**
  * Gestionnaire de webhook REST API
@@ -18,7 +19,7 @@ class WebhookHandler {
 		register_rest_route( 'postal-warmup/v1', '/webhook', array(
 			'methods'             => 'POST',
 			'callback'            => array( $this, 'handle_webhook' ),
-			'permission_callback' => array( $this, 'verify_signature' ),
+			'permission_callback' => array( $this, 'verify_request' ),
 		) );
 		
 		register_rest_route( 'postal-warmup/v1', '/test', array(
@@ -28,36 +29,93 @@ class WebhookHandler {
 		) );
 	}
 
+	public function verify_request( WP_REST_Request $request ): bool|WP_Error {
+		$ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+
+		// 1. IP Whitelist Check
+		$whitelist = Settings::get( 'webhook_ip_whitelist', '' );
+		if ( ! empty( $whitelist ) ) {
+			$allowed_ips = array_map( 'trim', explode( "\n", $whitelist ) );
+			$allowed = false;
+			foreach ( $allowed_ips as $allowed_ip ) {
+				// Simple IP check or CIDR logic could go here
+				if ( $ip === $allowed_ip || $this->cidr_match( $ip, $allowed_ip ) ) {
+					$allowed = true;
+					break;
+				}
+			}
+			if ( ! $allowed ) {
+				Logger::warning( "Webhook bloqué par IP Whitelist: $ip" );
+				return new WP_Error( 'forbidden', 'IP not allowed', [ 'status' => 403 ] );
+			}
+		}
+
+		// 2. Rate Limiting
+		if ( ! $this->check_rate_limit( $ip ) ) {
+			Logger::warning( "Webhook Rate Limit dépassé pour IP: $ip" );
+			return new WP_Error( 'too_many_requests', 'Rate limit exceeded', [ 'status' => 429 ] );
+		}
+
+		// 3. Strict Mode / Signature Check
+		if ( Settings::get( 'webhook_strict_mode', true ) ) {
+			return $this->verify_signature( $request );
+		}
+
+		return true;
+	}
+
+	private function check_rate_limit( $ip ) {
+		$minute_limit = (int) Settings::get( 'webhook_rate_limit_minute', 100 );
+		$hour_limit = (int) Settings::get( 'webhook_rate_limit_hour', 2000 );
+
+		$transient_min = 'pw_webhook_limit_min_' . md5( $ip );
+		$transient_hour = 'pw_webhook_limit_hour_' . md5( $ip );
+
+		$count_min = (int) get_transient( $transient_min );
+		$count_hour = (int) get_transient( $transient_hour );
+
+		if ( $count_min >= $minute_limit || $count_hour >= $hour_limit ) {
+			return false;
+		}
+
+		set_transient( $transient_min, $count_min + 1, 60 );
+		set_transient( $transient_hour, $count_hour + 1, 3600 );
+
+		return true;
+	}
+
+	private function cidr_match( $ip, $range ) {
+		if ( strpos( $range, '/' ) === false ) return false;
+		list( $subnet, $bits ) = explode( '/', $range );
+		$ip = ip2long( $ip );
+		$subnet = ip2long( $subnet );
+		$mask = -1 << ( 32 - $bits );
+		$subnet &= $mask;
+		return ( $ip & $mask ) == $subnet;
+	}
+
 	public function verify_signature( WP_REST_Request $request ): bool|WP_Error {
-		$secret = get_option( 'pw_webhook_secret' );
+		$secret = get_option( 'pw_webhook_secret' ); // Use option directly as it's the source of truth
 		
-		// Auto-génération si manquant pour éviter un blocage total sur installation existante
 		if ( empty( $secret ) ) {
 			$secret = wp_generate_password( 64, false );
 			update_option( 'pw_webhook_secret', $secret );
-			Logger::info( 'Webhook : Secret généré automatiquement lors du premier accès.' );
 		}
 		
-		// Force la récupération depuis les paramètres d'URL (GET) uniquement
-		// pour éviter les conflits avec un champ "token" présent dans le body JSON de Postal
 		$params = $request->get_query_params();
 		$token = isset( $params['token'] ) ? (string) $params['token'] : '';
 		
-		// DEBUG: Logs étendus pour diagnostic (tokens masqués)
-		Logger::debug( 'Webhook: Vérification signature', [
-			'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
-			'query_params' => $request->get_query_params(),
-			'received_token_start' => substr( $token, 0, 5 ) . '...',
-			'expected_secret_start' => substr( $secret, 0, 5 ) . '...'
-		] );
-
-		// Comparaison sécurisée
 		if ( empty( $token ) || ! hash_equals( $secret, $token ) ) {
-			Logger::warning( 'Webhook : Token invalide ou manquant', [ 
-				'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-				'received_token' => $token, // On garde le reçu en entier pour debug temporaire si vraiment besoin, mais idéalement masqué
-				'expected_token_start' => substr( $secret, 0, 5 ) . '...' // Ne JAMAIS logger le secret attendu en entier
-			] );
+			$action = Settings::get( 'webhook_invalid_signature_action', 'log' );
+
+			if ( $action === 'log' || $action === 'notify' ) {
+				Logger::warning( 'Webhook : Token invalide ou manquant', [
+					'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+					'received_token' => substr( $token, 0, 5 ) . '...'
+				] );
+			}
+
+			// Always reject in strict mode
 			return new WP_Error( 'forbidden', 'Invalid token', [ 'status' => 403 ] );
 		}
 		

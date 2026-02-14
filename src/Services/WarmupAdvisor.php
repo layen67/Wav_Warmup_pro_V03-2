@@ -7,6 +7,7 @@ use PostalWarmup\Models\Stats;
 use PostalWarmup\Models\Strategy;
 use PostalWarmup\Admin\ISPManager;
 use PostalWarmup\Services\Logger;
+use PostalWarmup\Admin\Settings;
 
 /**
  * Service de conseil et de surveillance du warmup
@@ -22,8 +23,10 @@ class WarmupAdvisor {
 	 * Exécute l'analyse et déclenche les recommandations
 	 */
 	public static function run() {
-		// Log start only in debug mode to avoid spamming
-		// Logger::debug( 'WarmupAdvisor: Début de l\'analyse...' );
+		// Vérification globale via Settings
+		if ( ! Settings::get( 'advisor_enabled', true ) ) {
+			return;
+		}
 
 		$servers = Database::get_servers();
 
@@ -103,8 +106,8 @@ class WarmupAdvisor {
 		if ( ! $server ) return;
 
 		// 1. Envoyer une alerte (si activé)
-		if ( get_option( 'pw_notify_on_error', true ) ) {
-			$to = get_option( 'pw_notification_email', get_option( 'admin_email' ) );
+		if ( Settings::get( 'notify_on_error', true ) ) {
+			$to = Settings::get( 'notify_email', get_option( 'admin_email' ) );
 			$subject = "[Warmup Alert] Action requise pour {$server['domain']}";
 			$message = "L'Advisor a détecté un problème sur le serveur {$server['domain']} (ISP: $isp).\n\n";
 			$message .= "Raison : $reason\n";
@@ -144,10 +147,10 @@ class WarmupAdvisor {
 
 			// --- Health Score Check ---
 			$score = HealthScoreCalculator::calculate_score( $server['id'] );
-			$threshold = (int) get_option( 'pw_health_score_threshold', 50 );
+			$threshold = (int) Settings::get( 'health_score_threshold', 50 );
 
 			if ( $score < $threshold ) {
-				$action = get_option( 'pw_health_score_action', 'none' );
+				$action = Settings::get( 'health_score_action', 'none' );
 				Logger::warning( "Santé Critique ({$score}/100) pour {$server['domain']}. Action: $action" );
 
 				if ( $action === 'pause' ) {
@@ -169,10 +172,10 @@ class WarmupAdvisor {
 			}
 
 			// --- Smart Routing Check ---
-			if ( get_option( 'pw_smart_routing_enabled', true ) ) {
+			if ( Settings::get( 'smart_routing_enabled', true ) ) {
 				$isp_rates = HealthScoreCalculator::get_isp_error_rates( $server['id'] );
-				$error_threshold = (int) get_option( 'pw_smart_routing_error_threshold', 5 );
-				$cooldown_min = (int) get_option( 'pw_smart_routing_cooldown', 60 );
+				$error_threshold = (int) Settings::get( 'smart_routing_error_threshold', 5 );
+				$cooldown_min = (int) Settings::get( 'smart_routing_cooldown', 60 );
 
 				foreach ( $isp_rates as $isp => $rate ) {
 					if ( $rate > $error_threshold ) {

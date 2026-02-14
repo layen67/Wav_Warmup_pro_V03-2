@@ -875,7 +875,7 @@
             // Toolbar: Insert Variable Button
             $(document).on('click', '.pw-insert-var-btn', function(e) {
                 e.preventDefault();
-                const $select = $(this).siblings('.pw-var-select');
+                const $select = $(this).closest('.pw-toolbar-group').find('.pw-var-select');
                 const val = $select.val();
                  if (val) {
                     const $container = $(this).closest('.pw-variant-item');
@@ -892,8 +892,7 @@
             // Toolbar: Copy Variable
             $(document).on('click', '.pw-copy-var-btn', function(e) {
                 e.preventDefault();
-                // The select is sibling
-                const $select = $(this).siblings('.pw-var-select');
+                const $select = $(this).closest('.pw-toolbar-group').find('.pw-var-select');
                 const val = $select.val();
 
                 if (val) {

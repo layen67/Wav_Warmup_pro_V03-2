@@ -89,17 +89,22 @@ $strategies = Strategy::get_all();
                                     if ($servers) {
                                         foreach ($servers as $srv) {
                                             $stats = Stats::get_server_isp_stats($srv['id'], $isp['isp_key']);
+
+                                            // Fix critical error: Handle both object and array return types
+                                            $warmup_day = is_object($stats) ? ($stats->warmup_day ?? 1) : ($stats['warmup_day'] ?? 1);
+                                            $sent_today = is_object($stats) ? ($stats->sent_today ?? 0) : ($stats['sent_today'] ?? 0);
+
                                             $limit = 0;
 
                                             // Calculate actual limit based on strategy
                                             if (!empty($isp['strategy_id'])) {
                                                 $strategy = Strategy::get($isp['strategy_id']);
                                                 if ($strategy) {
-                                                    $limit = \PostalWarmup\Services\StrategyEngine::calculate_daily_limit($strategy, $stats['warmup_day'], $isp['isp_key']);
+                                                    $limit = \PostalWarmup\Services\StrategyEngine::calculate_daily_limit($strategy, $warmup_day, $isp['isp_key']);
                                                 }
                                             }
 
-                                            $pct = ($limit > 0) ? min(100, round(($stats['sent_today'] / $limit) * 100)) : 0;
+                                            $pct = ($limit > 0) ? min(100, round(($sent_today / $limit) * 100)) : 0;
                                             $bar_color = ($pct >= 90) ? 'danger' : (($pct >= 70) ? 'warning' : 'success');
 
                                             echo '<div class="pw-isp-server-item">';
@@ -109,7 +114,7 @@ $strategies = Strategy::get_all();
                                             echo '<div class="pw-progress-bar ' . $bar_color . '" style="width: ' . $pct . '%;"></div>';
                                             echo '</div>';
                                             echo '</div>';
-                                            echo '<div class="server-meta">J' . $stats['warmup_day'] . ' • ' . $stats['sent_today'] . '/' . ($limit ?: '∞') . '</div>';
+                                            echo '<div class="server-meta">J' . $warmup_day . ' • ' . $sent_today . '/' . ($limit ?: '∞') . '</div>';
                                             echo '</div>';
                                         }
                                     }
@@ -217,11 +222,12 @@ $strategies = Strategy::get_all();
 <script>
 jQuery(document).ready(function($) {
     // Open Modal Add
-    $('#pw-add-isp-btn').on('click', function() {
+    $(document).on('click', '#pw-add-isp-btn', function(e) {
+        e.preventDefault();
         $('#pw-isp-form')[0].reset();
         $('#pw-isp-id').val('');
         $('#pw-isp-modal-title').text('<?php _e('Ajouter un Profil ISP', 'postal-warmup'); ?>');
-        $('#pw-isp-modal').fadeIn(200);
+        $('#pw-isp-modal').css('display', 'flex').hide().fadeIn(200);
     });
 
     // Open Modal Edit

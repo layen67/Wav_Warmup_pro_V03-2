@@ -924,6 +924,52 @@
                     TemplateEditor.insertAtCursor($textarea[0], '{ | }');
                 }
             });
+
+            // Toolbar: Code / Preview Toggle
+            $(document).on('click', '.pw-toggle-btn', function(e) {
+                e.preventDefault();
+                const $btn = $(this);
+                if ($btn.hasClass('active')) return;
+
+                const mode = $btn.data('mode');
+                const $group = $btn.closest('.pw-view-toggle');
+                const $container = $btn.closest('.pw-variant-item');
+                const $editor = $container.find('.pw-variant-editor');
+                const $textarea = $editor.find('.pw-variant-input');
+                const $preview = $editor.find('.pw-variant-preview');
+
+                // Toggle buttons
+                $group.find('.pw-toggle-btn').removeClass('active');
+                $btn.addClass('active');
+
+                if (mode === 'preview') {
+                    let content = $textarea.val();
+
+                    // Simple HTML rendering.
+                    // Note: This does not process spintax or variables fully server-side,
+                    // it serves as a quick visual check for HTML structure.
+
+                    // If content is empty
+                    if (!content.trim()) {
+                        content = '<em style="color:#999">Contenu vide...</em>';
+                    } else {
+                        // Basic Spintax Highlighting (Optional visual aid)
+                        // content = content.replace(/\{([^{}]*)\}/g, '<span style="background:#fff3cd; padding:0 2px; border-radius:2px;" title="Spintax">{$1}</span>');
+
+                        // Render HTML
+                        // We rely on the browser's rendering.
+                        // IMPORTANT: For text content (not HTML), we might want to nl2br?
+                        // But the editor is generic.
+                    }
+
+                    $preview.html(content);
+                    $textarea.hide();
+                    $preview.show();
+                } else {
+                    $textarea.show();
+                    $preview.hide();
+                }
+            });
         },
 
         insertAtCursor(field, value) {

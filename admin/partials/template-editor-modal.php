@@ -220,7 +220,7 @@ if (!defined('ABSPATH')) exit;
     <div class="pw-variant-item" data-type="<%- type %>">
         <div class="pw-variant-toolbar">
             <div class="pw-toolbar-group">
-                <select class="pw-var-select" style="max-width: 120px;">
+                <select class="pw-var-select">
                     <option value="">Variables...</option>
                     <option value="{{prenom}}">Prénom</option>
                     <option value="{{civilite}}">Civilité</option>
@@ -232,19 +232,25 @@ if (!defined('ABSPATH')) exit;
                     <option value="{{site_name}}">Site Name</option>
                     <option value="{{admin_email}}">Admin Email</option>
                 </select>
-                <button type="button" class="pw-insert-var-btn" title="Insérer à la position du curseur" style="margin-right:2px;"><span class="dashicons dashicons-plus-alt2" style="font-size:14px; width:14px; height:14px; margin-top:3px;"></span></button>
-                <button type="button" class="pw-copy-var-btn" title="Copier dans le presse-papier"><span class="dashicons dashicons-clipboard" style="font-size:14px; width:14px; height:14px; margin-top:3px;"></span></button>
-                <div style="width: 1px; background: #ddd; margin: 0 5px;"></div>
+                <div class="pw-btn-group">
+                    <button type="button" class="pw-insert-var-btn" title="Insérer à la position du curseur"><span class="dashicons dashicons-plus-alt2"></span></button>
+                    <button type="button" class="pw-copy-var-btn" title="Copier dans le presse-papier"><span class="dashicons dashicons-clipboard"></span></button>
+                </div>
+
                 <button type="button" class="pw-spintax-btn" title="Insérer Spintax { | }">Spintax</button>
-                <div style="width: 1px; background: #ddd; margin: 0 8px;"></div>
-                <button type="button" class="pw-toggle-btn active" data-mode="code">Code</button>
-                <button type="button" class="pw-toggle-btn" data-mode="preview">Preview</button>
+
+                <div class="pw-btn-group pw-view-toggle">
+                    <button type="button" class="pw-toggle-btn active" data-mode="code">Code</button>
+                    <button type="button" class="pw-toggle-btn" data-mode="preview">Preview</button>
+                </div>
             </div>
+
             <div class="pw-toolbar-group">
                 <button type="button" class="pw-expand-btn" title="Mode Focus (Plein écran)"><span class="dashicons dashicons-editor-expand"></span></button>
-                <div style="width: 1px; background: #ddd; margin: 0 5px;"></div>
-                <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Base64</button>
-                <button type="button" class="pw-base64-decode-btn" title="Décoder le contenu Base64">Décoder</button>
+                <div class="pw-btn-group">
+                    <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Base64</button>
+                    <button type="button" class="pw-base64-decode-btn" title="Décoder le contenu Base64">Décoder</button>
+                </div>
             </div>
         </div>
         <div class="pw-variant-editor">
@@ -263,110 +269,105 @@ if (!defined('ABSPATH')) exit;
 .pw-variant-toolbar {
     margin-bottom: 5px;
     display: flex;
-    flex-wrap: wrap; /* Allow wrapping on small screens */
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
-    background: #f6f7f7; /* Slight background for toolbar */
-    padding: 5px;
+    background: #f6f7f7;
+    padding: 5px 8px;
     border: 1px solid #c3c4c7;
-    border-bottom: none; /* Connect to textarea */
+    border-bottom: none;
     border-radius: 4px 4px 0 0;
 }
 .pw-toolbar-group {
     display: flex;
     align-items: center;
-    gap: 5px; /* Spacing between items */
+    gap: 8px;
 }
-.pw-toggle-btn {
-    padding: 3px 10px;
-    background: #f0f0f1;
-    border: 1px solid #c3c4c7;
-    cursor: pointer;
-    font-size: 11px;
+.pw-btn-group {
+    display: inline-flex;
 }
-.pw-toggle-btn:first-child { border-radius: 3px 0 0 3px; border-right: none; }
-.pw-toggle-btn:last-child { border-radius: 0 3px 3px 0; }
-.pw-toggle-btn.active {
-    background: #fff;
-    border-bottom-color: #fff;
-    font-weight: 600;
+.pw-btn-group button {
+    border-radius: 0;
+    margin-left: -1px;
 }
-.pw-var-select {
-    font-size: 11px;
-    height: 24px;
-    min-height: 24px;
-    border: 1px solid #c3c4c7;
-    border-radius: 3px;
-    margin-right: 5px;
-    padding: 0 5px;
-    cursor: pointer;
+.pw-btn-group button:first-child {
+    border-top-left-radius: 3px;
+    border-bottom-left-radius: 3px;
+    margin-left: 0;
 }
-.pw-spintax-btn {
+.pw-btn-group button:last-child {
+    border-top-right-radius: 3px;
+    border-bottom-right-radius: 3px;
+}
+
+/* Base Button Styles in Toolbar */
+.pw-variant-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0 8px;
-    font-size: 11px;
-    height: 24px;
+    height: 28px;
+    font-size: 12px;
+    line-height: 1;
+    background: #fff;
     border: 1px solid #c3c4c7;
-    border-radius: 3px;
-    background: #f0f0f1;
+    color: #2c3338;
     cursor: pointer;
+    transition: all 0.1s ease;
+}
+.pw-variant-toolbar button:hover {
+    background: #f0f0f1;
+    border-color: #8c8f94;
     color: #1d2327;
 }
-.pw-spintax-btn:hover {
-    background: #fff;
-    border-color: #2271b1;
-}
-.pw-insert-var-btn, .pw-copy-var-btn {
-    padding: 0 5px;
-    height: 24px;
-    border: 1px solid #c3c4c7;
-    border-radius: 3px;
-    background: #fff;
-    cursor: pointer;
-    color: #2271b1;
-}
-.pw-insert-var-btn:hover, .pw-copy-var-btn:hover {
-    border-color: #2271b1;
+.pw-variant-toolbar button:active,
+.pw-variant-toolbar button.active {
     background: #f0f0f1;
+    border-color: #8c8f94;
+    box-shadow: inset 0 2px 5px -3px rgba(0,0,0,0.1);
 }
-.pw-base64-btn {
-    padding: 3px 10px;
-    font-size: 10px;
+
+/* Specific Styles */
+.pw-var-select {
+    height: 28px;
+    font-size: 12px;
     border: 1px solid #c3c4c7;
     border-radius: 3px;
-    background: #fff;
+    padding: 0 5px;
+    min-width: 100px;
     cursor: pointer;
-    color: #2271b1;
 }
-.pw-base64-btn:hover {
-    border-color: #2271b1;
+
+.pw-insert-var-btn .dashicons,
+.pw-copy-var-btn .dashicons,
+.pw-expand-btn .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    margin: 0;
 }
-.pw-base64-decode-btn {
-    padding: 3px 10px;
-    font-size: 10px;
-    border: 1px solid #c3c4c7;
+
+.pw-spintax-btn {
     border-radius: 3px;
-    background: #fff;
-    cursor: pointer;
-    color: #4f46e5;
-    margin-left: 5px;
+    font-weight: 500;
 }
-.pw-base64-decode-btn:hover {
-    border-color: #4f46e5;
-}
+
 .pw-expand-btn {
-    padding: 3px 5px;
-    font-size: 14px;
-    border: 1px solid #c3c4c7;
     border-radius: 3px;
-    background: #fff;
-    cursor: pointer;
-    color: #50575e;
-    line-height: 1;
 }
-.pw-expand-btn:hover {
-    border-color: #2271b1;
+
+.pw-toggle-btn.active {
+    background: #f0f0f1;
+    font-weight: 600;
+    color: #1d2327;
+    border-color: #8c8f94;
+}
+
+.pw-base64-decode-btn {
     color: #2271b1;
 }
+
+/* Preview Area */
 .pw-variant-preview {
     border: 1px solid #c3c4c7;
     padding: 10px;

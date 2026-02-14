@@ -1,232 +1,232 @@
 <?php
 /**
- * Vue du tableau de bord
+ * Vue du tableau de bord (Modernized)
+ * Implements "Dashboard Principal – Vue d’ensemble" from UI_UX_MOCKUP_PROPOSAL.md
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Récupérer les stats
+// Retrieve enriched stats
 $stats = PW_Stats::get_dashboard_stats();
-$recent_errors = PW_Stats::get_recent_errors(5);
-
+$servers = PW_Stats::get_servers_stats();
 ?>
-<div class="wrap pw-dashboard">
-    <h1>
-        <?php _e('Tableau de bord - Postal Warmup', 'postal-warmup'); ?>
-        <a href="<?php echo admin_url('admin.php?page=postal-warmup-servers&action=add'); ?>" class="page-title-action">
-            <?php _e('Ajouter un serveur', 'postal-warmup'); ?>
-        </a>
-    </h1>
 
-    <!-- Statistiques principales -->
-    <div class="pw-stats-widgets">
-        <div class="pw-stat-card">
-            <div class="pw-stat-icon">
+<div class="wrap pw-dashboard">
+    <div class="pw-header">
+        <h1>
+            <span class="dashicons dashicons-chart-area"></span>
+            <?php _e('Tableau de Bord', 'postal-warmup'); ?>
+        </h1>
+        <div class="pw-actions">
+             <a href="<?php echo admin_url('admin.php?page=postal-warmup-servers&action=add'); ?>" class="pw-btn pw-btn-primary">
+                <span class="dashicons dashicons-plus"></span>
+                <?php _e('Ajouter un serveur', 'postal-warmup'); ?>
+            </a>
+        </div>
+    </div>
+
+    <!-- 1. Top Stats Cards -->
+    <div class="pw-stats-grid">
+        <!-- Total Sent -->
+        <div class="pw-stat-widget">
+            <div class="pw-stat-icon primary">
                 <span class="dashicons dashicons-email-alt"></span>
             </div>
             <div class="pw-stat-content">
-                <div class="pw-stat-value" id="pw-d-total-sent"><?php echo number_format_i18n($stats['total_sent']); ?></div>
-                <div class="pw-stat-label"><?php _e('Emails envoyés', 'postal-warmup'); ?></div>
+                <span class="pw-stat-label"><?php _e('Total Envoyés', 'postal-warmup'); ?></span>
+                <span class="pw-stat-value"><?php echo number_format_i18n($stats['total_sent']); ?></span>
             </div>
         </div>
 
-        <div class="pw-stat-card">
-            <div class="pw-stat-icon success">
+        <!-- Success Rate -->
+        <div class="pw-stat-widget">
+            <div class="pw-stat-icon <?php echo $stats['success_rate'] >= 90 ? 'success' : ($stats['success_rate'] >= 75 ? 'warning' : 'error'); ?>">
                 <span class="dashicons dashicons-yes-alt"></span>
             </div>
             <div class="pw-stat-content">
-                <div class="pw-stat-value" id="pw-d-success-rate"><?php echo $stats['success_rate']; ?>%</div>
-                <div class="pw-stat-label"><?php _e('Taux de succès', 'postal-warmup'); ?></div>
+                <span class="pw-stat-label"><?php _e('Taux de Succès', 'postal-warmup'); ?></span>
+                <span class="pw-stat-value"><?php echo $stats['success_rate']; ?>%</span>
             </div>
         </div>
 
-        <div class="pw-stat-card">
-            <div class="pw-stat-icon primary">
-                <span class="dashicons dashicons-admin-site-alt3"></span>
+        <!-- Today Volume -->
+        <div class="pw-stat-widget">
+            <div class="pw-stat-icon info">
+                <span class="dashicons dashicons-calendar-alt"></span>
             </div>
             <div class="pw-stat-content">
-                <div class="pw-stat-value" id="pw-d-active-servers">
-                    <?php echo $stats['active_servers']; ?> / <?php echo $stats['total_servers']; ?>
-                </div>
-                <div class="pw-stat-label"><?php _e('Serveurs actifs', 'postal-warmup'); ?></div>
+                <span class="pw-stat-label"><?php _e('Aujourd\'hui', 'postal-warmup'); ?></span>
+                <span class="pw-stat-value">
+                    <?php echo number_format_i18n($stats['sent_today']); ?>
+                    <?php if (isset($stats['evolution']) && $stats['evolution'] != 0): ?>
+                        <small style="font-size: 0.6em; color: <?php echo $stats['evolution'] > 0 ? 'var(--pw-success)' : 'var(--pw-danger)'; ?>">
+                            <?php echo $stats['evolution'] > 0 ? '+' : ''; ?><?php echo $stats['evolution']; ?>%
+                        </small>
+                    <?php endif; ?>
+                </span>
             </div>
         </div>
 
-        <div class="pw-stat-card">
-            <div class="pw-stat-icon <?php echo $stats['evolution'] >= 0 ? 'success' : 'error'; ?>">
-                <span class="dashicons dashicons-chart-line"></span>
+        <!-- Active Servers -->
+        <div class="pw-stat-widget">
+            <div class="pw-stat-icon warning">
+                <span class="dashicons dashicons-networking"></span>
             </div>
             <div class="pw-stat-content">
-                <div class="pw-stat-value" id="pw-d-sent-today">
-                    <?php echo $stats['sent_today']; ?>
-                    <small style="font-size: 14px; color: <?php echo $stats['evolution'] >= 0 ? '#46b450' : '#dc3232'; ?>">
-                        (<?php echo $stats['evolution'] >= 0 ? '+' : ''; ?><?php echo $stats['evolution']; ?>%)
-                    </small>
-                </div>
-                <div class="pw-stat-label"><?php _e('Aujourd\'hui', 'postal-warmup'); ?></div>
+                <span class="pw-stat-label"><?php _e('Serveurs Actifs', 'postal-warmup'); ?></span>
+                <span class="pw-stat-value"><?php echo $stats['active_servers']; ?> / <?php echo $stats['total_servers']; ?></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Main Dashboard Table: Servers Overview -->
+    <div class="pw-card">
+        <div class="pw-card-header">
+            <h3><?php _e('État des Serveurs & Quotas', 'postal-warmup'); ?></h3>
+            <div class="pw-actions">
+                <!-- Filters could go here -->
+            </div>
+        </div>
+        <div class="pw-card-body" style="padding: 0;">
+            <div class="pw-table-responsive">
+                <table class="pw-table">
+                    <thead>
+                        <tr>
+                            <th><?php _e('Serveur', 'postal-warmup'); ?></th>
+                            <th><?php _e('Status', 'postal-warmup'); ?></th>
+                            <th style="width: 30%;"><?php _e('Quota Journalier', 'postal-warmup'); ?></th>
+                            <th><?php _e('Envoyés (24h)', 'postal-warmup'); ?></th>
+                            <th><?php _e('Erreurs (24h)', 'postal-warmup'); ?></th>
+                            <th><?php _e('Latence Moy.', 'postal-warmup'); ?></th>
+                            <th><?php _e('Actions', 'postal-warmup'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($servers)): ?>
+                            <tr>
+                                <td colspan="7" style="text-align: center; padding: 20px; color: var(--pw-text-muted);">
+                                    <?php _e('Aucun serveur configuré.', 'postal-warmup'); ?>
+                                </td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($servers as $server):
+                                // Mock Data for Quota Visualization until Strategy integration is fully exposed
+                                $quota = isset($server['quota']) ? $server['quota'] : 100; // Default placeholder
+                                $used = isset($server['sent_today']) ? $server['sent_today'] : 0;
+                                $percentage = $quota > 0 ? min(100, round(($used / $quota) * 100)) : 0;
+
+                                // Color logic
+                                $color_class = 'success';
+                                if ($percentage >= 90) $color_class = 'danger';
+                                elseif ($percentage >= 75) $color_class = 'warning';
+                            ?>
+                            <tr>
+                                <td>
+                                    <div style="font-weight: 600;"><?php echo esc_html($server['domain']); ?></div>
+                                    <div style="font-size: 12px; color: var(--pw-text-muted);"><?php echo esc_html($server['ip'] ?? '127.0.0.1'); ?></div>
+                                </td>
+                                <td>
+                                    <?php if ($server['active']): ?>
+                                        <span class="pw-badge pw-badge-success"><?php _e('Actif', 'postal-warmup'); ?></span>
+                                    <?php else: ?>
+                                        <span class="pw-badge pw-badge-danger"><?php _e('Inactif', 'postal-warmup'); ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <!-- Progress Bar -->
+                                    <div class="pw-progress-wrapper">
+                                        <div class="pw-progress-bar <?php echo $color_class; ?>" style="width: <?php echo $percentage; ?>%;"></div>
+                                    </div>
+                                    <div class="pw-progress-text">
+                                        <span><?php echo $used; ?> / <?php echo $quota > 0 ? $quota : '∞'; ?></span>
+                                        <span><?php echo $percentage; ?>%</span>
+                                    </div>
+                                </td>
+                                <td><?php echo number_format_i18n($server['sent_count'] ?? 0); ?></td>
+                                <td>
+                                    <?php
+                                    $errors = $server['error_count'] ?? 0;
+                                    if ($errors > 0): ?>
+                                        <span class="pw-badge pw-badge-warning"><?php echo $errors; ?></span>
+                                    <?php else: ?>
+                                        <span style="color: var(--pw-text-light);">-</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php
+                                    $latency = isset($server['avg_response_time']) ? round($server['avg_response_time'] * 1000) : 0;
+                                    echo $latency . ' ms';
+                                    ?>
+                                </td>
+                                <td>
+                                    <div class="pw-cell-actions">
+                                        <a href="<?php echo admin_url('admin.php?page=postal-warmup-servers&action=edit&id=' . $server['id']); ?>" class="pw-btn pw-btn-secondary pw-btn-sm" title="<?php _e('Configurer', 'postal-warmup'); ?>">
+                                            <span class="dashicons dashicons-admin-generic"></span>
+                                        </a>
+                                        <a href="<?php echo admin_url('admin.php?page=postal-warmup-logs&server_id=' . $server['id']); ?>" class="pw-btn pw-btn-secondary pw-btn-sm" title="<?php _e('Logs', 'postal-warmup'); ?>">
+                                            <span class="dashicons dashicons-list-view"></span>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
     <div class="pw-dashboard-grid">
-        
-        <!-- Graphique des envois -->
-        <div class="pw-dashboard-widget">
-            <div class="pw-widget-header">
-                <h2><?php _e('Envois des 7 derniers jours', 'postal-warmup'); ?></h2>
-                <select id="pw-chart-period" class="pw-period-select">
-                    <option value="7"><?php _e('7 jours', 'postal-warmup'); ?></option>
-                    <option value="14"><?php _e('14 jours', 'postal-warmup'); ?></option>
-                    <option value="30"><?php _e('30 jours', 'postal-warmup'); ?></option>
-                </select>
+        <!-- Chart Widget -->
+        <div class="pw-card">
+            <div class="pw-card-header">
+                <h3><?php _e('Volume d\'envoi (7 jours)', 'postal-warmup'); ?></h3>
             </div>
-            <div class="pw-widget-content">
-                <canvas id="pw-sends-chart" width="400" height="200"></canvas>
+            <div class="pw-card-body">
+                <canvas id="pw-sends-chart" style="width: 100%; height: 250px;"></canvas>
             </div>
         </div>
 
-        <!-- Serveurs actifs -->
-        <div class="pw-dashboard-widget">
-            <div class="pw-widget-header">
-                <h2><?php _e('Serveurs actifs', 'postal-warmup'); ?></h2>
-                <a href="<?php echo admin_url('admin.php?page=postal-warmup-servers'); ?>">
-                    <?php _e('Voir tous', 'postal-warmup'); ?> &rarr;
-                </a>
+        <!-- Recent Activity / Errors -->
+        <div class="pw-card">
+            <div class="pw-card-header">
+                <h3><?php _e('Activité Récente', 'postal-warmup'); ?></h3>
+                <a href="<?php echo admin_url('admin.php?page=postal-warmup-logs'); ?>" class="pw-btn pw-btn-secondary pw-btn-sm"><?php _e('Voir tout', 'postal-warmup'); ?></a>
             </div>
-            <div class="pw-widget-content" id="pw-servers-widget-content">
-                <?php
-                $servers = PW_Stats::get_servers_stats();
-                if (empty($servers)) :
-                ?>
-                    <p class="pw-no-data">
-                        <?php _e('Aucun serveur configuré', 'postal-warmup'); ?>
-                        <a href="<?php echo admin_url('admin.php?page=postal-warmup-servers&action=add'); ?>">
-                            <?php _e('Ajouter un serveur', 'postal-warmup'); ?>
-                        </a>
-                    </p>
-                <?php else : ?>
-                    <table class="wp-list-table widefat fixed striped">
-                        <thead>
-                            <tr>
-                                <th><?php _e('Domaine', 'postal-warmup'); ?></th>
-                                <th><?php _e('Envoyés', 'postal-warmup'); ?></th>
-                                <th><?php _e('Succès', 'postal-warmup'); ?></th>
-                                <th><?php _e('Taux', 'postal-warmup'); ?></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach (array_slice($servers, 0, 5) as $server) : ?>
-                                <tr>
-                                    <td>
-                                        <strong><?php echo esc_html($server['domain']); ?></strong>
-                                    </td>
-                                    <td><?php echo number_format_i18n($server['sent_count']); ?></td>
-                                    <td><?php echo number_format_i18n($server['success_count']); ?></td>
-                                    <td>
-                                        <span class="pw-badge <?php echo $server['success_rate'] >= 90 ? 'success' : 'warning'; ?>">
-                                            <?php echo $server['success_rate']; ?>%
-                                        </span>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- Erreurs récentes -->
-        <div class="pw-dashboard-widget">
-            <div class="pw-widget-header">
-                <h2><?php _e('Erreurs récentes', 'postal-warmup'); ?></h2>
-                <a href="<?php echo admin_url('admin.php?page=postal-warmup-logs'); ?>">
-                    <?php _e('Voir tous les logs', 'postal-warmup'); ?> &rarr;
-                </a>
-            </div>
-            <div class="pw-widget-content" id="pw-errors-widget-content">
-                <?php if (empty($recent_errors)) : ?>
-                    <p class="pw-no-data">
-                        <span class="dashicons dashicons-yes-alt" style="color: #46b450;"></span>
-                        <?php _e('Aucune erreur récente', 'postal-warmup'); ?>
-                    </p>
-                <?php else : ?>
-                    <ul class="pw-errors-list">
-                        <?php foreach ($recent_errors as $error) : ?>
-                            <li class="pw-error-item">
-                                <div class="pw-error-level">
-                                    <span class="pw-badge error"><?php echo esc_html($error['level']); ?></span>
+            <div class="pw-card-body" style="padding: 0;">
+                <ul class="pw-activity-list" style="max-height: 250px; overflow-y: auto;">
+                    <?php
+                    $recent_logs = PW_Database::get_enriched_activity(5);
+                    if (empty($recent_logs)): ?>
+                        <li class="pw-activity-item" style="padding: 20px; text-align: center; color: var(--pw-text-muted);">
+                            <?php _e('Aucune activité récente.', 'postal-warmup'); ?>
+                        </li>
+                    <?php else: ?>
+                        <?php foreach ($recent_logs as $log):
+                            $badge_class = 'pw-badge-neutral';
+                            if ($log['level'] === 'error') $badge_class = 'pw-badge-error';
+                            elseif ($log['level'] === 'warning') $badge_class = 'pw-badge-warning';
+                            elseif ($log['level'] === 'success') $badge_class = 'pw-badge-success';
+                        ?>
+                        <li class="pw-activity-item" style="padding: 12px 16px;">
+                            <div class="pw-activity-header">
+                                <span class="pw-badge <?php echo $badge_class; ?>"><?php echo esc_html($log['level']); ?></span>
+                                <span class="pw-activity-time"><?php echo human_time_diff(strtotime($log['created_at']), current_time('timestamp')); ?></span>
+                            </div>
+                            <div class="pw-activity-msg"><?php echo esc_html($log['message']); ?></div>
+                            <?php if (!empty($log['server_domain'])): ?>
+                                <div class="pw-activity-meta">
+                                    <span class="dashicons dashicons-networking" style="font-size: 14px;"></span> <?php echo esc_html($log['server_domain']); ?>
                                 </div>
-                                <div class="pw-error-details">
-                                    <div class="pw-error-message"><?php echo esc_html($error['message']); ?></div>
-                                    <div class="pw-error-meta">
-                                        <?php if ($error['server_domain']) : ?>
-                                            <span><?php echo esc_html($error['server_domain']); ?></span> •
-                                        <?php endif; ?>
-                                        <span><?php echo human_time_diff(strtotime($error['created_at']), current_time('timestamp')); ?> <?php _e('ago', 'postal-warmup'); ?></span>
-                                    </div>
-                                </div>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- Informations système -->
-        <div class="pw-dashboard-widget">
-            <div class="pw-widget-header">
-                <h2><?php _e('Informations système', 'postal-warmup'); ?></h2>
-            </div>
-            <div class="pw-widget-content">
-                <table class="pw-info-table">
-                    <tr>
-                        <td><?php _e('Version du plugin', 'postal-warmup'); ?></td>
-                        <td><strong><?php echo PW_VERSION; ?></strong></td>
-                    </tr>
-                    <tr>
-                        <td><?php _e('URL du webhook', 'postal-warmup'); ?></td>
-                        <td>
-                            <?php 
-                            $webhook_url = rest_url('postal-warmup/v1/webhook');
-                            $secret = get_option('pw_webhook_secret');
-                            if ($secret) {
-                                $webhook_url = add_query_arg('token', $secret, $webhook_url);
-                            }
-                            ?>
-                            <code style="font-size: 11px;">
-                                <?php echo esc_url($webhook_url); ?>
-                            </code>
-                            <button type="button" class="button button-small pw-copy-btn" data-clipboard="<?php echo esc_attr($webhook_url); ?>">
-                                <?php _e('Copier', 'postal-warmup'); ?>
-                            </button>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><?php _e('Logs actifs', 'postal-warmup'); ?></td>
-                        <td>
-                            <?php if (get_option('pw_enable_logging', true)) : ?>
-                                <span class="pw-badge success"><?php _e('Activé', 'postal-warmup'); ?></span>
-                            <?php else : ?>
-                                <span class="pw-badge error"><?php _e('Désactivé', 'postal-warmup'); ?></span>
                             <?php endif; ?>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><?php _e('Limite quotidienne', 'postal-warmup'); ?></td>
-                        <td>
-                            <?php 
-                            $daily_limit = get_option('pw_daily_limit', 0);
-                            echo $daily_limit > 0 ? number_format_i18n($daily_limit) : __('Illimité', 'postal-warmup');
-                            ?>
-                        </td>
-                    </tr>
-                </table>
+                        </li>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </ul>
             </div>
         </div>
-
     </div>
 </div>
-
-<!-- Script JS déplacé dans admin.js pour optimisation et centralisation -->

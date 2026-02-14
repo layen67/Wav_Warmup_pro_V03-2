@@ -1,6 +1,7 @@
 <?php
 /**
- * Vue : Gestion des FAI (ISP)
+ * Vue : Gestion des FAI (ISP) - Modernized
+ * Implements "ISP Manager – Gestion des ISPs" from UI_UX_MOCKUP_PROPOSAL.md
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
@@ -10,93 +11,163 @@ use PostalWarmup\Models\Strategy;
 use PostalWarmup\Models\Stats;
 use PostalWarmup\Models\Database;
 
+$isps = ISPManager::get_all();
+$servers = Database::get_servers(true);
+$strategies = Strategy::get_all();
 ?>
-<div class="wrap">
-    <h1 class="wp-heading-inline">Gestion des Profils ISP</h1>
-    <button class="page-title-action" id="pw-add-isp-btn">Ajouter un Profil</button>
-    <hr class="wp-header-end">
 
-    <table class="wp-list-table widefat fixed striped">
-        <thead>
-            <tr>
-                <th>Nom du Profil</th>
-                <th>Domaines Associés</th>
-                <th>Stratégie</th>
-                <th>Statut</th>
-                <th>Détails par Serveur</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody id="pw-isp-list">
-            <?php 
-            $isps = ISPManager::get_all();
-            $servers = Database::get_servers(true); // Active servers
+<div class="wrap pw-page-wrapper">
+    <div class="pw-header">
+        <h1>
+            <span class="dashicons dashicons-groups"></span>
+            <?php _e('Gestion des Profils ISP', 'postal-warmup'); ?>
+        </h1>
+        <button type="button" class="pw-btn pw-btn-primary" id="pw-add-isp-btn">
+            <span class="dashicons dashicons-plus"></span>
+            <?php _e('Nouveau Profil', 'postal-warmup'); ?>
+        </button>
+    </div>
 
-            if ( empty( $isps ) ): ?>
-                <tr><td colspan="6">Aucun profil ISP configuré.</td></tr>
-            <?php else: foreach ( $isps as $isp ): 
-                $domains_list = implode(', ', $isp['domains']);
-                if (strlen($domains_list) > 50) $domains_list = substr($domains_list, 0, 50) . '...';
-            ?>
-                <tr data-id="<?php echo esc_attr($isp['id']); ?>" data-json="<?php echo esc_attr(json_encode($isp)); ?>">
-                    <td><strong><?php echo esc_html($isp['isp_label']); ?></strong><br><small style="color:#888"><?php echo esc_html($isp['isp_key']); ?></small></td>
-                    <td><?php echo esc_html($domains_list); ?></td>
-                    <td>
-                        <?php if(!empty($isp['strategy_name'])): ?>
-                            <span class="pw-badge" style="background:#2271b1;"><?php echo esc_html($isp['strategy_name']); ?></span>
-                        <?php else: ?>
-                            <?php echo esc_html($isp['strategy']); ?>
-                        <?php endif; ?>
-                    </td>
-                    <td><?php echo $isp['active'] ? '<span class="pw-badge success">Actif</span>' : '<span class="pw-badge error">Inactif</span>'; ?></td>
-                    <td>
-                        <?php 
-                        // Show breakdown per server
-                        if ($servers) {
-                            echo '<div class="pw-server-stats-grid">';
-                            foreach ($servers as $srv) {
-                                $stats = Stats::get_server_isp_stats($srv['id'], $isp['isp_key']);
-                                // Calculate Limit if Strategy is set
-                                $limit_display = '-';
-                                if (!empty($isp['strategy_id'])) {
-                                    $strategy = Strategy::get($isp['strategy_id']);
-                                    if ($strategy) {
-                                        $limit = \PostalWarmup\Services\StrategyEngine::calculate_daily_limit($strategy, $stats->warmup_day, $isp['isp_key']);
-                                        $limit_display = $limit;
-                                    }
-                                }
-                                
-                                echo '<div class="pw-server-stat-item">';
-                                echo '<strong>' . esc_html($srv['domain']) . ':</strong> ';
-                                echo 'J' . $stats->warmup_day . ' ';
-                                echo '<span class="pw-usage">(' . $stats->sent_today . '/' . $limit_display . ')</span>';
-                                echo '</div>';
-                            }
-                            echo '</div>';
-                        }
+    <div class="pw-card">
+        <div class="pw-card-body" style="padding: 0;">
+            <div class="pw-table-responsive">
+                <table class="pw-table">
+                    <thead>
+                        <tr>
+                            <th><?php _e('Nom du Profil', 'postal-warmup'); ?></th>
+                            <th><?php _e('Domaines Associés', 'postal-warmup'); ?></th>
+                            <th><?php _e('Stratégie', 'postal-warmup'); ?></th>
+                            <th><?php _e('Statut', 'postal-warmup'); ?></th>
+                            <th><?php _e('Détails par Serveur (Jauge)', 'postal-warmup'); ?></th>
+                            <th><?php _e('Actions', 'postal-warmup'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody id="pw-isp-list">
+                        <?php if ( empty( $isps ) ): ?>
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 32px; color: var(--pw-text-muted);">
+                                    <?php _e('Aucun profil ISP configuré.', 'postal-warmup'); ?>
+                                </td>
+                            </tr>
+                        <?php else: foreach ( $isps as $isp ):
+                            $domains_list = is_array($isp['domains']) ? implode(', ', $isp['domains']) : $isp['domains'];
+                            if (strlen($domains_list) > 60) $domains_list = substr($domains_list, 0, 60) . '...';
+
+                            // Determine Strategy Badge Color
+                            $strategy_badge_class = 'pw-badge-neutral';
+                            $strategy_name = $isp['strategy_name'] ?? 'Aucune';
+
+                            if (stripos($strategy_name, 'agressive') !== false) $strategy_badge_class = 'pw-badge-warning';
+                            elseif (stripos($strategy_name, 'douce') !== false || stripos($strategy_name, 'conservative') !== false) $strategy_badge_class = 'pw-badge-success';
+                            elseif (!empty($isp['strategy_id'])) $strategy_badge_class = 'pw-badge-info';
                         ?>
-                    </td>
-                    <td>
-                        <button class="button pw-edit-isp">Éditer</button>
-                        <button class="button pw-delete-isp" style="color: #b32d2e; border-color: #b32d2e;">Supprimer</button>
-                    </td>
-                </tr>
-            <?php endforeach; endif; ?>
-        </tbody>
-    </table>
+                            <tr data-id="<?php echo esc_attr($isp['id']); ?>" data-json="<?php echo esc_attr(json_encode($isp)); ?>">
+                                <td>
+                                    <div style="font-weight: 600;"><?php echo esc_html($isp['isp_label']); ?></div>
+                                    <div style="font-size: 11px; color: var(--pw-text-muted);"><?php echo esc_html($isp['isp_key']); ?></div>
+                                </td>
+                                <td>
+                                    <div style="font-size: 13px; color: var(--pw-text-body); max-width: 300px; overflow: hidden; text-overflow: ellipsis;">
+                                        <?php echo esc_html($domains_list); ?>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="pw-badge <?php echo $strategy_badge_class; ?>">
+                                        <?php echo esc_html($strategy_name); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <?php if ($isp['active']): ?>
+                                        <span class="pw-badge pw-badge-success"><?php _e('Actif', 'postal-warmup'); ?></span>
+                                    <?php else: ?>
+                                        <span class="pw-badge pw-badge-error"><?php _e('Inactif', 'postal-warmup'); ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <div class="pw-isp-server-grid">
+                                    <?php
+                                    if ($servers) {
+                                        foreach ($servers as $srv) {
+                                            $stats = Stats::get_server_isp_stats($srv['id'], $isp['isp_key']);
+                                            $limit = 0;
+
+                                            // Calculate actual limit based on strategy
+                                            if (!empty($isp['strategy_id'])) {
+                                                $strategy = Strategy::get($isp['strategy_id']);
+                                                if ($strategy) {
+                                                    $limit = \PostalWarmup\Services\StrategyEngine::calculate_daily_limit($strategy, $stats['warmup_day'], $isp['isp_key']);
+                                                }
+                                            }
+
+                                            $pct = ($limit > 0) ? min(100, round(($stats['sent_today'] / $limit) * 100)) : 0;
+                                            $bar_color = ($pct >= 90) ? 'danger' : (($pct >= 70) ? 'warning' : 'success');
+
+                                            echo '<div class="pw-isp-server-item">';
+                                            echo '<div class="server-name">' . esc_html($srv['domain']) . '</div>';
+                                            echo '<div class="server-progress">';
+                                            echo '<div class="pw-progress-wrapper" style="height: 4px;">';
+                                            echo '<div class="pw-progress-bar ' . $bar_color . '" style="width: ' . $pct . '%;"></div>';
+                                            echo '</div>';
+                                            echo '</div>';
+                                            echo '<div class="server-meta">J' . $stats['warmup_day'] . ' • ' . $stats['sent_today'] . '/' . ($limit ?: '∞') . '</div>';
+                                            echo '</div>';
+                                        }
+                                    }
+                                    ?>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="pw-cell-actions">
+                                        <button type="button" class="pw-btn pw-btn-secondary pw-btn-sm pw-edit-isp" title="<?php _e('Modifier', 'postal-warmup'); ?>">
+                                            <span class="dashicons dashicons-edit"></span>
+                                        </button>
+                                        <button type="button" class="pw-btn pw-btn-danger pw-btn-sm pw-delete-isp" title="<?php _e('Supprimer', 'postal-warmup'); ?>">
+                                            <span class="dashicons dashicons-trash"></span>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 
 <style>
-.pw-server-stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 5px; font-size: 11px; }
-.pw-server-stat-item { background: #f0f0f1; padding: 3px 6px; border-radius: 3px; }
-.pw-usage { color: #666; }
+.pw-isp-server-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.pw-isp-server-item {
+    background: var(--pw-surface-alt);
+    border: 1px solid var(--pw-border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    width: 140px;
+}
+.server-name {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.server-progress { margin-bottom: 4px; }
+.server-meta {
+    font-size: 10px;
+    color: var(--pw-text-muted);
+}
 </style>
 
-<!-- Modal -->
+<!-- Modal: ISP Editor -->
 <div id="pw-isp-modal" class="pw-modal" style="display:none;">
-    <div class="pw-modal-content pw-modal-lg">
+    <div class="pw-modal-content">
         <div class="pw-modal-header">
-            <h2 id="pw-isp-modal-title">Configurer un Profil ISP</h2>
+            <h3 id="pw-isp-modal-title"><?php _e('Configurer un Profil ISP', 'postal-warmup'); ?></h3>
             <button class="pw-modal-close">&times;</button>
         </div>
         <div class="pw-modal-body">
@@ -104,43 +175,41 @@ use PostalWarmup\Models\Database;
                 <input type="hidden" name="id" id="pw-isp-id">
                 
                 <div class="pw-form-group">
-                    <label>Nom du Profil (Label)</label>
-                    <input type="text" name="isp_label" id="pw-isp-label" class="widefat" required placeholder="Ex: Gmail Corporate">
+                    <label for="pw-isp-label"><?php _e('Nom du Profil (Label)', 'postal-warmup'); ?> *</label>
+                    <input type="text" name="isp_label" id="pw-isp-label" required placeholder="Ex: Gmail Corporate">
                 </div>
 
                 <div class="pw-form-group">
-                    <label>Domaines associés (séparés par virgules)</label>
-                    <textarea name="domains" id="pw-isp-domains" class="widefat" rows="3" placeholder="gmail.com, googlemail.com"></textarea>
-                    <p class="description">Tous les emails se terminant par ces domaines utiliseront ce profil.</p>
+                    <label for="pw-isp-domains"><?php _e('Domaines associés', 'postal-warmup'); ?></label>
+                    <textarea name="domains" id="pw-isp-domains" rows="3" placeholder="gmail.com, googlemail.com"></textarea>
+                    <p class="description"><?php _e('Séparez les domaines par des virgules.', 'postal-warmup'); ?></p>
                 </div>
 
-                <!-- Quota Fields Removed (Replaced by Strategy) -->
+                <!-- Obsolete fields hidden but preserved for DB compatibility -->
                 <input type="hidden" name="max_daily" id="pw-isp-daily" value="0">
                 <input type="hidden" name="max_hourly" id="pw-isp-hourly" value="0">
 
                 <div class="pw-form-group">
-                    <label>Stratégie de Warmup</label>
-                    <select name="strategy_id" id="pw-isp-strategy-id" class="widefat">
-                        <option value="">-- Aucune --</option>
-                        <?php foreach ( Strategy::get_all() as $s ): ?>
+                    <label for="pw-isp-strategy-id"><?php _e('Stratégie de Warmup', 'postal-warmup'); ?></label>
+                    <select name="strategy_id" id="pw-isp-strategy-id">
+                        <option value="">-- <?php _e('Aucune (Manuel)', 'postal-warmup'); ?> --</option>
+                        <?php foreach ( $strategies as $s ): ?>
                             <option value="<?php echo $s['id']; ?>"><?php echo esc_html($s['name']); ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <p class="description">La stratégie détermine les volumes et règles de sécurité par serveur.</p>
                 </div>
 
                 <div class="pw-form-group">
                     <label>
                         <input type="checkbox" name="active" id="pw-isp-active" value="1" checked> 
-                        Activer ce profil
+                        <?php _e('Activer ce profil', 'postal-warmup'); ?>
                     </label>
                 </div>
-
             </form>
         </div>
         <div class="pw-modal-footer">
-            <button class="button button-secondary pw-modal-close">Annuler</button>
-            <button class="button button-primary" id="pw-save-isp">Enregistrer</button>
+            <button type="button" class="pw-btn pw-btn-secondary pw-modal-close"><?php _e('Annuler', 'postal-warmup'); ?></button>
+            <button type="button" class="pw-btn pw-btn-primary" id="pw-save-isp"><?php _e('Enregistrer', 'postal-warmup'); ?></button>
         </div>
     </div>
 </div>
@@ -151,8 +220,8 @@ jQuery(document).ready(function($) {
     $('#pw-add-isp-btn').on('click', function() {
         $('#pw-isp-form')[0].reset();
         $('#pw-isp-id').val('');
-        $('#pw-isp-modal-title').text('Ajouter un Profil ISP');
-        $('#pw-isp-modal').show();
+        $('#pw-isp-modal-title').text('<?php _e('Ajouter un Profil ISP', 'postal-warmup'); ?>');
+        $('#pw-isp-modal').fadeIn(200);
     });
 
     // Open Modal Edit
@@ -162,32 +231,31 @@ jQuery(document).ready(function($) {
         
         $('#pw-isp-id').val(data.id);
         $('#pw-isp-label').val(data.isp_label);
-        $('#pw-isp-domains').val(data.domains ? data.domains.join(', ') : '');
-        // Quota fields hidden but values kept just in case
-        $('#pw-isp-daily').val(data.max_daily);
-        $('#pw-isp-hourly').val(data.max_hourly);
+        $('#pw-isp-domains').val(Array.isArray(data.domains) ? data.domains.join(', ') : data.domains);
         $('#pw-isp-strategy-id').val(data.strategy_id);
         $('#pw-isp-active').prop('checked', data.active == 1);
         
-        $('#pw-isp-modal-title').text('Modifier Profil : ' + data.isp_label);
-        $('#pw-isp-modal').show();
+        $('#pw-isp-modal-title').text('<?php _e('Modifier Profil', 'postal-warmup'); ?>: ' + data.isp_label);
+        $('#pw-isp-modal').fadeIn(200);
     });
 
     // Close Modal
     $('.pw-modal-close').on('click', function() {
-        $('#pw-isp-modal').hide();
+        $('#pw-isp-modal').fadeOut(200);
     });
 
     // Save
     $('#pw-save-isp').on('click', function() {
         var btn = $(this);
-        btn.prop('disabled', true);
+        var originalText = btn.html();
+        btn.prop('disabled', true).text('Sauvegarde...');
         
         var formData = $('#pw-isp-form').serialize();
+        // pwAdmin is globally available
         formData += '&action=pw_save_isp&nonce=' + pwAdmin.nonce;
 
         $.post(pwAdmin.ajaxurl, formData, function(res) {
-            btn.prop('disabled', false);
+            btn.prop('disabled', false).html(originalText);
             if(res.success) {
                 location.reload();
             } else {
@@ -198,7 +266,7 @@ jQuery(document).ready(function($) {
 
     // Delete
     $('.pw-delete-isp').on('click', function() {
-        if(!confirm('Supprimer ce profil ISP ?')) return;
+        if(!confirm('<?php _e('Supprimer ce profil ISP ?', 'postal-warmup'); ?>')) return;
         var id = $(this).closest('tr').data('id');
         $.post(pwAdmin.ajaxurl, {
             action: 'pw_delete_isp',
@@ -211,23 +279,3 @@ jQuery(document).ready(function($) {
     });
 });
 </script>
-
-<style>
-.pw-modal {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.5); z-index: 99999;
-    display: flex; justify-content: center; align-items: center;
-}
-.pw-modal-content {
-    background: #fff; padding: 20px; width: 600px; max-width: 90%;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2); border-radius: 5px;
-}
-.pw-modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
-.pw-modal-footer { border-top: 1px solid #eee; padding-top: 15px; margin-top: 15px; text-align: right; }
-.pw-modal-close { background: none; border: none; font-size: 20px; cursor: pointer; }
-.pw-form-group { margin-bottom: 15px; }
-.pw-form-group label { display: block; font-weight: 600; margin-bottom: 5px; }
-.pw-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; color: #fff; }
-.pw-badge.success { background: #46b450; }
-.pw-badge.error { background: #dc3232; }
-</style>

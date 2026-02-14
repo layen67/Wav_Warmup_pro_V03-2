@@ -9,9 +9,15 @@ class Settings {
 	// Default Settings Configuration
 	private $defaults = [
 		// General
+		'sending_enabled' => true, // Global Sending Toggle
 		'global_tag' => 'warmup',
 		'disable_ip_logging' => false,
 		'enable_logging' => true,
+		'schedule_start_hour' => 8,
+		'schedule_end_hour' => 20,
+		'send_on_weekends' => true,
+		'daily_limit_global' => 0,
+		'hourly_limit_global' => 0,
 
 		// Security
 		'webhook_strict_mode' => true,
@@ -51,6 +57,10 @@ class Settings {
 		'pause_bounce_rate' => 5,
 		'pause_spam_rate' => 1,
 		'pause_failure_rate' => 10,
+		'default_from_name' => '',
+		'default_from_email' => '',
+		'custom_headers' => '',
+		'bounce_handling_action' => 'mark_failed', // remove, mark_failed, notify
 
 		// Performance
 		'enable_transient_cache' => true,
@@ -181,7 +191,11 @@ class Settings {
 				} elseif ( $type === 'boolean' ) {
 					$output[$key] = (bool) $input[$key];
 				} else {
-					$output[$key] = sanitize_text_field( $input[$key] );
+					if ( in_array( $key, [ 'custom_headers', 'webhook_ip_whitelist' ] ) ) {
+						$output[$key] = sanitize_textarea_field( $input[$key] );
+					} else {
+						$output[$key] = sanitize_text_field( $input[$key] );
+					}
 				}
 			}
 		}
@@ -227,6 +241,10 @@ class Settings {
 			'general' => [
 				'label' => __( 'Général', 'postal-warmup' ),
 				'fields' => [
+					'sending_enabled' => [ 'label' => __( 'Activer l\'envoi Global', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Désactiver pour tout arrêter instantanément.', 'postal-warmup' ) ],
+					'schedule_start_hour' => [ 'label' => __( 'Début Envoi (Heure)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Ex: 8 pour 08:00.', 'postal-warmup' ) ],
+					'schedule_end_hour' => [ 'label' => __( 'Fin Envoi (Heure)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Ex: 20 pour 20:00.', 'postal-warmup' ) ],
+					'send_on_weekends' => [ 'label' => __( 'Envoyer le Week-end', 'postal-warmup' ), 'type' => 'checkbox' ],
 					'global_tag' => [ 'label' => __( 'Tag Global', 'postal-warmup' ), 'type' => 'text', 'desc' => __( 'Tag ajouté à tous les emails.', 'postal-warmup' ) ],
 					'enable_logging' => [ 'label' => __( 'Activer les Logs', 'postal-warmup' ), 'type' => 'checkbox' ],
 					'disable_ip_logging' => [ 'label' => __( 'Désactiver IP Log', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Conformité RGPD', 'postal-warmup' ) ],
@@ -258,6 +276,7 @@ class Settings {
 			'queue' => [
 				'label' => __( 'File d\'attente', 'postal-warmup' ),
 				'fields' => [
+					'daily_limit_global' => [ 'label' => __( 'Limite Journalière Globale', 'postal-warmup' ), 'type' => 'number', 'desc' => __( '0 = Illimité.', 'postal-warmup' ) ],
 					'queue_batch_size' => [ 'label' => __( 'Taille du lot', 'postal-warmup' ), 'type' => 'number' ],
 					'queue_interval' => [ 'label' => __( 'Intervalle (min)', 'postal-warmup' ), 'type' => 'number' ],
 					'queue_locking_enabled' => [ 'label' => __( 'Verrouillage Queue', 'postal-warmup' ), 'type' => 'checkbox' ],
@@ -270,6 +289,19 @@ class Settings {
 					],
 					'queue_pause_threshold' => [ 'label' => __( 'Seuil Pause Auto (%)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Si > X% d\'échecs.', 'postal-warmup' ) ],
 					'queue_resume_delay' => [ 'label' => __( 'Délai Reprise (min)', 'postal-warmup' ), 'type' => 'number' ],
+				]
+			],
+			'warmup' => [
+				'label' => __( 'Warmup', 'postal-warmup' ),
+				'fields' => [
+					'default_from_name' => [ 'label' => __( 'From Name par défaut', 'postal-warmup' ), 'type' => 'text' ],
+					'default_from_email' => [ 'label' => __( 'From Email par défaut', 'postal-warmup' ), 'type' => 'text' ],
+					'custom_headers' => [ 'label' => __( 'Headers Personnalisés', 'postal-warmup' ), 'type' => 'textarea', 'desc' => __( 'Un par ligne (ex: List-Unsubscribe: <...>)', 'postal-warmup' ) ],
+					'bounce_handling_action' => [
+						'label' => __( 'Gestion des Bounces', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'mark_failed' => 'Marquer comme Échoué', 'remove' => 'Supprimer de la Queue', 'notify' => 'Notifier Admin' ]
+					],
 				]
 			],
 			'performance' => [

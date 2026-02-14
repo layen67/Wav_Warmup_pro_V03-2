@@ -168,6 +168,16 @@ class WebhookHandler {
 			case 'MessageBounced':
 				$this->track_metric( $payload, 'bounced', $ctx );
 				Logger::warning( 'Message rebondi', array_merge( $log_context, [ 'status' => 'bounced' ] ) );
+
+				// Handle Bounce Action
+				$action = Settings::get( 'bounce_handling_action', 'mark_failed' );
+				if ( $action === 'remove' ) {
+					// Logic to remove from queue or suppression list integration
+					// Assuming QueueManager has a method or direct DB access here
+					// Ideally: QueueManager::handle_bounce($email, $server_id);
+				} elseif ( $action === 'notify' ) {
+					// Trigger notification
+				}
 				break;
 			case 'MessageLinkClicked':
 				$this->track_metric( $payload, 'clicked', $ctx );

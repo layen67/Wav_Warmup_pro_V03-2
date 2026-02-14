@@ -102,13 +102,28 @@ class QueueManager {
     }
 
     private static function do_process_queue() {
+        // 1. Global Sending Rules
+        if ( ! Settings::get( 'sending_enabled', true ) ) {
+            return;
+        }
+
+        // Weekend Check
+        if ( ! Settings::get( 'send_on_weekends', true ) ) {
+            $day_of_week = (int) current_time( 'w' ); // 0 (Sun) - 6 (Sat)
+            if ( $day_of_week === 0 || $day_of_week === 6 ) {
+                return;
+            }
+        }
+
         global $wpdb;
         $table = $wpdb->prefix . 'postal_queue';
         
-        // 1. Load Settings
-        $settings = get_option('pw_warmup_settings', []);
         $global_tz = wp_timezone_string();
-        $slots = !empty($settings['schedule']) ? array_map('intval', $settings['schedule']) : range(9, 18);
+
+        // Schedule Window
+        $start_h = (int) Settings::get( 'schedule_start_hour', 8 );
+        $end_h = (int) Settings::get( 'schedule_end_hour', 20 );
+        $slots = range( $start_h, $end_h );
 
         // 2. Fetch Pending Items
         $now_mysql = current_time( 'mysql' );

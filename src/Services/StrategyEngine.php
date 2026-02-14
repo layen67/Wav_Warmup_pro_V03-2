@@ -2,6 +2,8 @@
 
 namespace PostalWarmup\Services;
 
+use PostalWarmup\Admin\Settings;
+
 class StrategyEngine {
 
     /**
@@ -12,18 +14,20 @@ class StrategyEngine {
      * @return int La limite d'envoi pour ce jour
      */
     public static function calculate_daily_limit( $strategy, $day ) {
-        if ( ! is_array( $strategy ) ) {
-            return 50; // Fallback safe limit
-        }
-
-        $config = $strategy['config'] ?? []; // Handle if config is nested or direct
-        // If config is inside strategy['config'], extract it.
-        // Usually strategy row has 'config_json' which is decoded into 'config'.
+        // Allow strategy to be null/empty, fallback to global settings
+        $config = is_array( $strategy ) ? ($strategy['config'] ?? []) : [];
         
-        $start = (int) ($config['start_volume'] ?? 10);
-        $max = (int) ($config['max_volume'] ?? 1000);
-        $type = $config['growth_type'] ?? 'linear';
-        $value = (float) ($config['growth_value'] ?? 10); 
+        // Defaults from Settings (Phase 4)
+        $default_start = (int) Settings::get( 'warmup_start', 10 );
+        $default_max = (int) Settings::get( 'warmup_max', 1000 );
+        $default_mode = Settings::get( 'warmup_mode', 'linear' );
+        $default_increase = (float) Settings::get( 'warmup_increase_percent', 20 );
+
+        // If strategy config is missing, use global defaults
+        $start = isset($config['start_volume']) ? (int) $config['start_volume'] : $default_start;
+        $max = isset($config['max_volume']) ? (int) $config['max_volume'] : $default_max;
+        $type = isset($config['growth_type']) ? $config['growth_type'] : $default_mode;
+        $value = isset($config['growth_value']) ? (float) $config['growth_value'] : $default_increase;
 
         if ( $day <= 1 ) return $start;
 
@@ -79,12 +83,15 @@ class StrategyEngine {
      * Retourne [ 'allowed' => bool, 'reason' => string, 'action' => 'pause'|'reduce'|'stop' ]
      */
     public static function check_safety_rules( $strategy, $stats ) {
-        $config = $strategy['config'] ?? [];
+        $config = is_array($strategy) ? ($strategy['config'] ?? []) : [];
         $rules = $config['safety_rules'] ?? [];
         
-        // Defaults if not set
-        $max_hard_bounce = (float) ($rules['max_hard_bounce'] ?? 2.0); // %
-        $max_complaint = (float) ($rules['max_complaint'] ?? 0.1); // %
+        // Defaults from Settings (Phase 4)
+        $default_bounce = (float) Settings::get( 'pause_bounce_rate', 5 );
+        $default_spam = (float) Settings::get( 'pause_spam_rate', 1 );
+
+        $max_hard_bounce = isset($rules['max_hard_bounce']) ? (float) $rules['max_hard_bounce'] : $default_bounce;
+        $max_complaint = isset($rules['max_complaint']) ? (float) $rules['max_complaint'] : $default_spam;
         
         $sent = (int) ($stats['sent_today'] ?? 0);
         if ( $sent < 10 ) return [ 'allowed' => true ]; // Not enough data to judge

@@ -283,6 +283,47 @@
         }
     });
 
+    // --- API KEY MODAL MANAGER (Servers) ---
+    $(document).ready(function() {
+        if (!$('#pw-api-key-modal').length) return;
+
+        // Open Modal
+        $(document).on('click', '#pw-change-api-key-btn', function(e) {
+            e.preventDefault();
+            $('#pw-new-api-key-input').val('');
+            $('#pw-api-key-modal').css('display', 'flex').hide().fadeIn(200);
+        });
+
+        // Close Modal
+        $(document).on('click', '#pw-api-key-modal .pw-modal-close', function(e) {
+            e.preventDefault();
+            $('#pw-api-key-modal').fadeOut(200);
+        });
+
+        // Confirm Change
+        $(document).on('click', '#pw-confirm-api-key', function(e) {
+            e.preventDefault();
+            const newKey = $('#pw-new-api-key-input').val().trim();
+
+            if (!newKey) {
+                alert('Veuillez entrer une clé API valide.');
+                $('#pw-new-api-key-input').focus();
+                return;
+            }
+
+            // Update hidden fields
+            $('#api_key_modified').val('1');
+            $('#api_key_new').val(newKey);
+
+            // Visual feedback
+            $('#pw-api-key-modal').fadeOut(200);
+            $('#pw-change-api-key-btn').html('<span class="dashicons dashicons-yes"></span> Modifiée').removeClass('pw-btn-secondary').addClass('pw-btn-success');
+
+            // Optional: submit form immediately? No, user might want to save other fields.
+            // But we should visually indicate the key is staged for update.
+        });
+    });
+
     // --- SUPPRESSION LIST MANAGER ---
     $(document).ready(function() {
         if ($('.pw-suppression-wrap').length) {

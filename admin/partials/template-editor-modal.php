@@ -20,8 +20,8 @@ if (!defined('ABSPATH')) exit;
                 
                 <div class="pw-editor-tabs">
                     <button type="button" class="pw-tab-btn active" data-tab="general">📌 Général</button>
-                    <button type="button" class="pw-tab-btn" data-tab="postal">📧 Postal</button>
                     <button type="button" class="pw-tab-btn" data-tab="mailto">🔗 Mailto</button>
+                    <button type="button" class="pw-tab-btn" data-tab="postal">📧 Postal</button>
                     <button type="button" class="pw-tab-btn" data-tab="stats">📊 Stats</button>
                 </div>
                 
@@ -86,6 +86,44 @@ if (!defined('ABSPATH')) exit;
                     </div>
                 </div>
                 
+                <!-- Tab: Mailto -->
+                <div class="pw-tab-content" id="pw-tab-mailto">
+                    <p class="description">Ces champs sont utilisés par le shortcode [warmup_mailto] pour pré-remplir l'email du visiteur.</p>
+
+                    <div class="pw-editor-section">
+                        <div class="pw-section-header">
+                            <h3>Noms d'expéditeur Mailto</h3>
+                            <div class="pw-header-btns">
+                                <button type="button" class="pw-add-variant" data-type="mailto_from_name" title="Ajouter une variante">+ Ajouter</button>
+                                <button type="button" class="pw-bulk-add-btn" data-type="mailto_from_name" title="Ajouter plusieurs lignes à la fois">📂 Bulk</button>
+                            </div>
+                        </div>
+                        <div id="pw-variants-mailto_from_name" class="pw-variants-container"></div>
+                    </div>
+
+                    <div class="pw-editor-section">
+                        <div class="pw-section-header">
+                            <h3>Sujets Mailto</h3>
+                            <div class="pw-header-btns">
+                                <button type="button" class="pw-add-variant" data-type="mailto_subject" title="Ajouter une variante">+ Ajouter</button>
+                                <button type="button" class="pw-bulk-add-btn" data-type="mailto_subject" title="Ajouter plusieurs lignes à la fois">📂 Bulk</button>
+                            </div>
+                        </div>
+                        <div id="pw-variants-mailto_subject" class="pw-variants-container"></div>
+                    </div>
+
+                    <div class="pw-editor-section">
+                        <div class="pw-section-header">
+                            <h3>Corps Mailto</h3>
+                            <div class="pw-header-btns">
+                                <button type="button" class="pw-add-variant" data-type="mailto_body" title="Ajouter une variante">+ Ajouter</button>
+                                <button type="button" class="pw-bulk-add-btn" data-type="mailto_body" title="Ajouter plusieurs lignes à la fois">📂 Bulk</button>
+                            </div>
+                        </div>
+                        <div id="pw-variants-mailto_body" class="pw-variants-container"></div>
+                    </div>
+                </div>
+
                 <!-- Tab: Postal -->
                 <div class="pw-tab-content" id="pw-tab-postal">
                     <div class="pw-editor-section">
@@ -141,44 +179,6 @@ if (!defined('ABSPATH')) exit;
                             </div>
                         </div>
                         <div id="pw-variants-html" class="pw-variants-container"></div>
-                    </div>
-                </div>
-                
-                <!-- Tab: Mailto -->
-                <div class="pw-tab-content" id="pw-tab-mailto">
-                    <p class="description">Ces champs sont utilisés par le shortcode [warmup_mailto] pour pré-remplir l'email du visiteur.</p>
-                    
-                    <div class="pw-editor-section">
-                        <div class="pw-section-header">
-                            <h3>Noms d'expéditeur Mailto</h3>
-                            <div class="pw-header-btns">
-                                <button type="button" class="pw-add-variant" data-type="mailto_from_name" title="Ajouter une variante">+ Ajouter</button>
-                                <button type="button" class="pw-bulk-add-btn" data-type="mailto_from_name" title="Ajouter plusieurs lignes à la fois">📂 Bulk</button>
-                            </div>
-                        </div>
-                        <div id="pw-variants-mailto_from_name" class="pw-variants-container"></div>
-                    </div>
-
-                    <div class="pw-editor-section">
-                        <div class="pw-section-header">
-                            <h3>Sujets Mailto</h3>
-                            <div class="pw-header-btns">
-                                <button type="button" class="pw-add-variant" data-type="mailto_subject" title="Ajouter une variante">+ Ajouter</button>
-                                <button type="button" class="pw-bulk-add-btn" data-type="mailto_subject" title="Ajouter plusieurs lignes à la fois">📂 Bulk</button>
-                            </div>
-                        </div>
-                        <div id="pw-variants-mailto_subject" class="pw-variants-container"></div>
-                    </div>
-
-                    <div class="pw-editor-section">
-                        <div class="pw-section-header">
-                            <h3>Corps Mailto</h3>
-                            <div class="pw-header-btns">
-                                <button type="button" class="pw-add-variant" data-type="mailto_body" title="Ajouter une variante">+ Ajouter</button>
-                                <button type="button" class="pw-bulk-add-btn" data-type="mailto_body" title="Ajouter plusieurs lignes à la fois">📂 Bulk</button>
-                            </div>
-                        </div>
-                        <div id="pw-variants-mailto_body" class="pw-variants-container"></div>
                     </div>
                 </div>
                 

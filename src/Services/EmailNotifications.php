@@ -3,6 +3,7 @@
 namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Stats;
+use PostalWarmup\Admin\Settings;
 
 /**
  * Service de notifications par email
@@ -14,11 +15,11 @@ class EmailNotifications {
 	 */
 	public static function send_error_notification( $message, $context = [] ) {
 		
-		if ( ! get_option( 'pw_notify_on_error', true ) ) {
+		if ( ! Settings::get( 'notify_on_error', true ) ) {
 			return;
 		}
 		
-		$to = get_option( 'pw_notification_email', get_option( 'admin_email' ) );
+		$to = Settings::get( 'notify_email', get_option( 'admin_email' ) );
 		
 		if ( empty( $to ) ) {
 			return;
@@ -106,11 +107,11 @@ class EmailNotifications {
 	 */
 	public static function send_daily_report() {
 		
-		if ( ! get_option( 'pw_daily_report', false ) ) {
+		if ( ! Settings::get( 'notify_daily_report', false ) ) {
 			return;
 		}
 		
-		$to = get_option( 'pw_notification_email', get_option( 'admin_email' ) );
+		$to = Settings::get( 'notify_email', get_option( 'admin_email' ) );
 		
 		if ( empty( $to ) ) {
 			return;
@@ -157,6 +158,29 @@ class EmailNotifications {
 		wp_mail( $to, $subject, $body, $headers );
 		
 		Logger::info( 'Rapport quotidien envoyé' );
+	}
+
+	public static function send_stuck_queue_alert( $minutes ) {
+		if ( ! Settings::get( 'notify_stuck_queue', true ) ) return;
+
+		$to = Settings::get( 'notify_email', get_option( 'admin_email' ) );
+		$subject = sprintf( __( '[%s] Alerte: File d\'attente bloquée', 'postal-warmup' ), get_bloginfo( 'name' ) );
+		$message = sprintf( __( "La file d'attente semble bloquée depuis plus de %d minutes.\nVeuillez vérifier l'état du système.", 'postal-warmup' ), $minutes );
+
+		wp_mail( $to, $subject, $message );
+	}
+
+	public static function send_high_failure_alert( $rate ) {
+		if ( ! Settings::get( 'notify_on_error', true ) ) return;
+
+		$threshold = (int) Settings::get( 'notify_failure_rate_threshold', 50 );
+		if ( $rate < $threshold ) return;
+
+		$to = Settings::get( 'notify_email', get_option( 'admin_email' ) );
+		$subject = sprintf( __( '[%s] Alerte: Taux d\'échec élevé (%d%%)', 'postal-warmup' ), get_bloginfo( 'name' ), $rate );
+		$message = sprintf( __( "Le taux d'échec global a atteint %d%% au cours des dernières 24h.\nSeuil d'alerte : %d%%.", 'postal-warmup' ), $rate, $threshold );
+
+		wp_mail( $to, $subject, $message );
 	}
 
 	/**

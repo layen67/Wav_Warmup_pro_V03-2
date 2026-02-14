@@ -76,8 +76,7 @@ class QueueManager {
                 Logger::critical( "Queue: Auto-paused for $resume_delay minutes due to high failure rate ({$failure_rate}%)" );
 
                 if ( Settings::get( 'notify_stuck_queue', true ) ) {
-                    // Send alert (EmailNotifications::send_alert would be better, but implementing inline for now)
-                    // TODO: Move to Notification Service
+                    EmailNotifications::send_stuck_queue_alert( $resume_delay );
                 }
                 return;
             }

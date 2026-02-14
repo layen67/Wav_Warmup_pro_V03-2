@@ -60,6 +60,43 @@ class Admin {
 			wp_enqueue_style( 'pw-templates', PW_PLUGIN_URL . 'admin/assets/css/templates.css', [ 'pw-admin' ], $script_version );
 		}
 
+		// Visual Customization Variables
+		$primary = Settings::get( 'ui_color_primary', '#2271b1' );
+		$success = Settings::get( 'ui_color_success', '#00a32a' );
+		$warning = Settings::get( 'ui_color_warning', '#dba617' );
+		$danger = Settings::get( 'ui_color_danger', '#d63638' );
+		$density = Settings::get( 'table_density', 'normal' );
+		$dark_mode = Settings::get( 'ui_dark_mode', 'auto' );
+
+		$density_padding = '12px 16px';
+		if ( $density === 'compact' ) $density_padding = '6px 10px';
+		if ( $density === 'comfortable' ) $density_padding = '16px 20px';
+
+		$css_vars = ":root {
+			--pw-primary: $primary;
+			--pw-primary-hover: " . $this->adjust_brightness( $primary, -15 ) . ";
+			--pw-primary-light: " . $this->adjust_brightness( $primary, 150 ) . ";
+			--pw-success: $success;
+			--pw-warning: $warning;
+			--pw-danger: $danger;
+		}
+		.pw-table th, .pw-table td { padding: $density_padding; }
+		";
+
+		// Dark Mode Logic
+		if ( $dark_mode === 'always' ) {
+			$css_vars .= "
+			body { background: #1e1e1e; color: #e0e0e0; }
+			.pw-card, .pw-stat-widget, .pw-table { background: #2d2d2d; border-color: #444; color: #e0e0e0; }
+			.pw-table th { background: #252525; color: #aaa; border-bottom-color: #444; }
+			.pw-table td { border-bottom-color: #444; color: #ccc; }
+			h1, h2, h3, label { color: #fff; }
+			input, select, textarea { background: #333 !important; border-color: #555 !important; color: #fff !important; }
+			";
+		}
+
+		wp_add_inline_style( 'pw-admin', $css_vars );
+
 		// White Label Custom CSS
 		$custom_css = get_option( 'pw_wl_custom_css' );
 		if ( ! empty( $custom_css ) ) {
@@ -136,5 +173,19 @@ class Admin {
 			echo '<div class="notice notice-success is-dismissible"><p><strong>Postal Warmup Pro activé !</strong> Ajoutez vos serveurs.</p></div>';
 			delete_transient( 'pw_activation_notice' );
 		}
+	}
+
+	private function adjust_brightness($hex, $steps) {
+		$steps = max(-255, min(255, $steps));
+		$hex = str_replace('#', '', $hex);
+		if (strlen($hex) == 3) $hex = str_repeat(substr($hex,0,1), 2).str_repeat(substr($hex,1,1), 2).str_repeat(substr($hex,2,1), 2);
+		$color_parts = str_split($hex, 2);
+		$return = '#';
+		foreach ($color_parts as $color) {
+			$color = hexdec($color);
+			$color = max(0, min(255, $color + $steps));
+			$return .= str_pad(dechex($color), 2, '0', STR_PAD_LEFT);
+		}
+		return $return;
 	}
 }

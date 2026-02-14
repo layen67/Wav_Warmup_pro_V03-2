@@ -85,7 +85,15 @@ class Settings {
 		'default_sort_order' => 'DESC',
 		'default_rows_per_page' => 25,
 		'color_theme' => 'blue',
+		'ui_color_primary' => '#2271b1',
+		'ui_color_success' => '#00a32a',
+		'ui_color_warning' => '#dba617',
+		'ui_color_danger' => '#d63638',
+		'ui_dark_mode' => 'auto', // auto, always, never
+		'table_density' => 'normal', // compact, normal, comfortable
+		'toast_notifications' => 'top-right', // disabled or position
 		'enable_animations' => true,
+		'dashboard_widgets' => ['sent', 'success_rate', 'volume', 'active_servers'], // Default visible
 
 		// Notifications
 		'notify_email' => '',
@@ -93,6 +101,8 @@ class Settings {
 		'notify_daily_report' => false,
 		'notify_stuck_queue' => true,
 		'notify_api_error' => true,
+		'notify_stuck_queue_threshold' => 60, // minutes
+		'notify_failure_rate_threshold' => 50, // %
 
 		// Advanced
 		'log_mode' => 'file',
@@ -340,6 +350,22 @@ class Settings {
 						'options' => [ 'ASC' => 'Croissant', 'DESC' => 'Décroissant' ]
 					],
 					'dashboard_refresh' => [ 'label' => __( 'Rafraîchissement Dashboard (s)', 'postal-warmup' ), 'type' => 'number' ],
+					'ui_color_primary' => [ 'label' => __( 'Couleur Primaire', 'postal-warmup' ), 'type' => 'color' ],
+					'ui_dark_mode' => [
+						'label' => __( 'Mode Sombre', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'auto' => 'Auto (Système)', 'always' => 'Toujours Actif', 'never' => 'Jamais' ]
+					],
+					'table_density' => [
+						'label' => __( 'Densité Tableaux', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'compact' => 'Compact', 'normal' => 'Normal', 'comfortable' => 'Confortable' ]
+					],
+					'toast_notifications' => [
+						'label' => __( 'Notifications Toast', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'disabled' => 'Désactivé', 'top-right' => 'Haut-Droite', 'bottom-right' => 'Bas-Droite' ]
+					],
 				]
 			],
 			'notifications' => [
@@ -347,6 +373,9 @@ class Settings {
 				'fields' => [
 					'notify_email' => [ 'label' => __( 'Email Notifications', 'postal-warmup' ), 'type' => 'email' ],
 					'notify_on_error' => [ 'label' => __( 'Alerte Erreurs', 'postal-warmup' ), 'type' => 'checkbox' ],
+					'notify_stuck_queue' => [ 'label' => __( 'Alerte Queue Bloquée', 'postal-warmup' ), 'type' => 'checkbox' ],
+					'notify_stuck_queue_threshold' => [ 'label' => __( 'Seuil Blocage (min)', 'postal-warmup' ), 'type' => 'number' ],
+					'notify_failure_rate_threshold' => [ 'label' => __( 'Seuil Taux Echec (%)', 'postal-warmup' ), 'type' => 'number' ],
 				]
 			],
 		];
@@ -368,6 +397,7 @@ class Settings {
 			case 'text':
 			case 'email':
 			case 'number':
+			case 'color':
 				echo '<input type="' . $args['type'] . '" name="' . $name . '" value="' . esc_attr( $value ) . '" class="regular-text">';
 				break;
 			case 'textarea':

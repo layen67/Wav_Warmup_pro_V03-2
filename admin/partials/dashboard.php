@@ -11,9 +11,12 @@ if (!defined('ABSPATH')) {
 // Retrieve enriched stats
 $stats = PW_Stats::get_dashboard_stats();
 $servers = PW_Stats::get_servers_stats();
+
+$widgets = Settings::get( 'dashboard_widgets', ['sent', 'success_rate', 'volume', 'active_servers'] );
+$refresh_rate = (int) Settings::get( 'dashboard_refresh', 30 );
 ?>
 
-<div class="wrap pw-dashboard">
+<div class="wrap pw-dashboard" data-refresh="<?php echo $refresh_rate; ?>">
     <div class="pw-header">
         <h1>
             <span class="dashicons dashicons-chart-area"></span>
@@ -30,6 +33,7 @@ $servers = PW_Stats::get_servers_stats();
     <!-- 1. Top Stats Cards -->
     <div class="pw-stats-grid">
         <!-- Total Sent -->
+        <?php if ( in_array( 'sent', $widgets ) ): ?>
         <div class="pw-stat-widget">
             <div class="pw-stat-icon primary">
                 <span class="dashicons dashicons-email-alt"></span>
@@ -39,8 +43,10 @@ $servers = PW_Stats::get_servers_stats();
                 <span class="pw-stat-value"><?php echo number_format_i18n($stats['total_sent']); ?></span>
             </div>
         </div>
+        <?php endif; ?>
 
         <!-- Success Rate -->
+        <?php if ( in_array( 'success_rate', $widgets ) ): ?>
         <div class="pw-stat-widget">
             <div class="pw-stat-icon <?php echo $stats['success_rate'] >= 90 ? 'success' : ($stats['success_rate'] >= 75 ? 'warning' : 'error'); ?>">
                 <span class="dashicons dashicons-yes-alt"></span>
@@ -50,8 +56,10 @@ $servers = PW_Stats::get_servers_stats();
                 <span class="pw-stat-value"><?php echo $stats['success_rate']; ?>%</span>
             </div>
         </div>
+        <?php endif; ?>
 
         <!-- Today Volume -->
+        <?php if ( in_array( 'volume', $widgets ) ): ?>
         <div class="pw-stat-widget">
             <div class="pw-stat-icon info">
                 <span class="dashicons dashicons-calendar-alt"></span>
@@ -68,8 +76,10 @@ $servers = PW_Stats::get_servers_stats();
                 </span>
             </div>
         </div>
+        <?php endif; ?>
 
         <!-- Active Servers -->
+        <?php if ( in_array( 'active_servers', $widgets ) ): ?>
         <div class="pw-stat-widget">
             <div class="pw-stat-icon warning">
                 <span class="dashicons dashicons-networking"></span>
@@ -79,6 +89,7 @@ $servers = PW_Stats::get_servers_stats();
                 <span class="pw-stat-value"><?php echo $stats['active_servers']; ?> / <?php echo $stats['total_servers']; ?></span>
             </div>
         </div>
+        <?php endif; ?>
     </div>
 
     <!-- 2. Main Dashboard Table: Servers Overview -->

@@ -1077,7 +1077,7 @@
                     $('#pw-editor-timezone').val(tpl.timezone || '');
 
                     // Load variants
-                    const variantTypes = ['subject', 'text', 'html', 'from_name', 'mailto_subject', 'mailto_body', 'mailto_from_name'];
+                    const variantTypes = ['subject', 'text', 'html', 'from_name', 'reply_to', 'mailto_subject', 'mailto_body', 'mailto_from_name'];
                     variantTypes.forEach(type => {
                         if (tpl[type] && Array.isArray(tpl[type])) {
                             tpl[type].forEach(val => this.addVariant(type, val));
@@ -1089,6 +1089,38 @@
             } catch (error) {
                 console.error('Error loading template:', error);
             }
+        },
+
+        openBulkModal(type) {
+            this.currentBulkType = type;
+            $('#pw-bulk-add-textarea').val('');
+            $('#pw-bulk-add-modal').show();
+            // Show/Hide specific info based on type
+            if (['html', 'text'].includes(type)) {
+                $('.pw-bulk-info-text').show();
+            } else {
+                $('.pw-bulk-info-text').hide();
+            }
+            $('#pw-bulk-add-textarea').focus();
+        },
+
+        confirmBulkAdd() {
+            const content = $('#pw-bulk-add-textarea').val();
+            if (!content.trim()) return;
+
+            const type = this.currentBulkType;
+            let variants = [];
+
+            // Special handling for HTML/Text which might be multi-line
+            if (['html', 'text'].includes(type) && content.includes('---')) {
+                variants = content.split(/\n---\n|---\n|\n---/g).map(v => v.trim()).filter(v => v);
+            } else {
+                // Default: line by line
+                variants = content.split('\n').map(v => v.trim()).filter(v => v);
+            }
+
+            variants.forEach(val => this.addVariant(type, val));
+            $('#pw-bulk-add-modal').hide();
         },
 
         addVariant(type, value = '') {
@@ -1310,6 +1342,15 @@
 
             $('.pw-add-variant').on('click', function() {
                 TemplateEditor.addVariant($(this).data('type'));
+            });
+
+            // Bulk Add Triggers
+            $('.pw-bulk-add-btn').on('click', function() {
+                TemplateEditor.openBulkModal($(this).data('type'));
+            });
+
+            $('#pw-bulk-add-confirm').on('click', function() {
+                TemplateEditor.confirmBulkAdd();
             });
 
             $('#pw-save-template-btn').on('click', function() {

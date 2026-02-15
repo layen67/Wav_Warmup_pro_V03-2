@@ -150,6 +150,10 @@ class Stats {
 		// General stats from servers table (cumulative)
 		$general = $wpdb->get_row( "SELECT COUNT(*) as total_servers, SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END) as active_servers FROM $servers_table", ARRAY_A );
 		
+		if ( ! $general ) {
+			$general = [ 'total_servers' => 0, 'active_servers' => 0 ];
+		}
+
 		// === Optimisation : Utilisation de la table d'agrégation journalière si disponible ===
 		$daily_table = $wpdb->prefix . 'postal_stats_daily';
 		
@@ -188,7 +192,7 @@ class Stats {
 		
 		$results = [
 			'total_sent'     => $total_sent,
-			'total_success'  => (int) ( $general['total_success'] ?? 0 ),
+			'total_success'  => $total_success,
 			'success_rate'   => $success_rate,
 			'total_servers'  => (int) ( $general['total_servers'] ?? 0 ),
 			'active_servers' => (int) ( $general['active_servers'] ?? 0 ),

@@ -4,6 +4,10 @@
  * Implements "Dashboard Principal – Vue d’ensemble" from UI_UX_MOCKUP_PROPOSAL.md
  */
 
+use PostalWarmup\Admin\Settings;
+use PostalWarmup\Models\Stats as PW_Stats;
+use PostalWarmup\Models\Database as PW_Database;
+
 if (!defined('ABSPATH')) {
     exit;
 }

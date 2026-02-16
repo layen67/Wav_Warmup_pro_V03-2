@@ -470,6 +470,15 @@ class Settings {
 				// Computed value, ignoring $value from DB
 				if ( $id === 'webhook_url' ) {
 					$url = get_rest_url( null, 'postal-warmup/v1/webhook' );
+
+					// Append token for security (Strict Mode)
+					$secret = get_option( 'pw_webhook_secret' );
+					if ( empty( $secret ) ) {
+						$secret = wp_generate_password( 64, false );
+						update_option( 'pw_webhook_secret', $secret );
+					}
+					$url = add_query_arg( 'token', $secret, $url );
+
 					echo '<div style="display:flex; gap:10px;">';
 					echo '<input type="text" value="' . esc_attr( $url ) . '" class="large-text code" readonly id="pw-webhook-url">';
 					echo '<button type="button" class="button button-secondary" onclick="navigator.clipboard.writeText(document.getElementById(\'pw-webhook-url\').value); alert(\'' . __( 'Copié !', 'postal-warmup' ) . '\');">';

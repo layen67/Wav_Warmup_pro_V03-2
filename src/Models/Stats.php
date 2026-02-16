@@ -230,9 +230,32 @@ class Stats {
 				$rate = round( ( $server['success_count'] / $server['sent_count'] ) * 100, 1 );
 			}
 			$server['success_rate'] = $rate;
+
+			// Add correct quota (Dynamic or Fixed)
+			$server['quota'] = self::get_dynamic_limit($server);
+
+			// Add IP address (Cached)
+			$server['ip'] = self::get_server_ip($server['domain']);
+
 			$stats[] = $server;
 		}
 		return $stats;
+	}
+
+	private static function get_server_ip( $domain ) {
+		$cache_key = 'pw_server_ip_' . md5( $domain );
+		$ip = get_transient( $cache_key );
+
+		if ( false === $ip ) {
+			$ip = gethostbyname( $domain );
+			// If resolution fails, gethostbyname returns the domain itself
+			if ( $ip === $domain ) {
+				$ip = null;
+			}
+			set_transient( $cache_key, $ip, 24 * HOUR_IN_SECONDS );
+		}
+
+		return $ip;
 	}
 	
 	public static function get_activity_24h() {

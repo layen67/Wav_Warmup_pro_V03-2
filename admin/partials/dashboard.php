@@ -130,9 +130,13 @@ $refresh_rate = (int) Settings::get( 'dashboard_refresh', 30 );
                             </tr>
                         <?php else: ?>
                             <?php foreach ($servers as $server):
-                                // Mock Data for Quota Visualization until Strategy integration is fully exposed
-                                $quota = isset($server['quota']) ? $server['quota'] : 100; // Default placeholder
-                                $used = isset($server['sent_today']) ? $server['sent_today'] : 0;
+                                // Data populated by Stats::get_servers_stats()
+                                $quota = isset($server['quota']) ? (int)$server['quota'] : 0;
+                                $used = isset($server['sent_today']) ? (int)$server['sent_today'] : 0;
+
+                                // If quota is 0 (should not happen with dynamic limit, but just in case), treat as unlimited for display?
+                                // Actually get_dynamic_limit returns at least 1 usually.
+                                // But if it returns 0, we avoid division by zero.
                                 $percentage = $quota > 0 ? min(100, round(($used / $quota) * 100)) : 0;
 
                                 // Color logic
@@ -143,7 +147,7 @@ $refresh_rate = (int) Settings::get( 'dashboard_refresh', 30 );
                             <tr>
                                 <td>
                                     <div style="font-weight: 600;"><?php echo esc_html($server['domain']); ?></div>
-                                    <div style="font-size: 12px; color: var(--pw-text-muted);"><?php echo esc_html($server['ip'] ?? '127.0.0.1'); ?></div>
+                                    <div style="font-size: 12px; color: var(--pw-text-muted);"><?php echo esc_html($server['ip'] ?? '-'); ?></div>
                                 </td>
                                 <td>
                                     <?php if ($server['active']): ?>

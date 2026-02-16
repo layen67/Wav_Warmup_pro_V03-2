@@ -1,92 +1,61 @@
-# Audit Technique : Postal Warmup Pro (v3.2.0)
+# Audit Complet & Plan d'Amélioration (2025)
 
-**Date :** 2025-05-20  
-**Version analysée :** 3.2.0  
-**Auteur de l'audit :** Jules (Expert WordPress)
+## 1. Vue d'ensemble
+Le plugin "Postal Warmup Pro" a évolué vers une architecture robuste (PSR-4), modulaire et sécurisée. Il intègre désormais des fonctionnalités avancées de simulation humaine (Jitter, Pause Déjeuner, Délais aléatoires) et une interface moderne.
 
----
+### Points Forts
+- **Architecture :** Séparation claire (Core, Admin, Services, Models, API).
+- **Sécurité :** Chiffrement fort (AES-256 + HMAC), validation stricte des Webhooks (Signature), échappement SQL systématique.
+- **Fiabilité :** Utilisation d'Action Scheduler pour les envois asynchrones, mécanismes de retry exponentiel, verrouillage de file d'attente.
+- **UI/UX :** Interface moderne, widgets temps réel, gestionnaire de templates riche.
 
-## 1. Résumé Global
-Le plugin **Postal Warmup Pro** est une solution robuste pour gérer le "warmup" d'emails via plusieurs serveurs Postal. Il est construit sur une architecture moderne (PSR-4, Composer) et intègre des fonctionnalités avancées comme le suivi des statistiques, la gestion des templates, et l'envoi asynchrone via Action Scheduler.
-
-Le code est généralement propre et bien structuré, mais présente quelques **failles de sécurité critiques** au niveau de l'interface d'administration (AJAX) et de la gestion des clés de chiffrement, qui doivent être corrigées immédiatement avant toute mise en production ou distribution publique.
-
----
-
-## 2. Points Forts
-*   **Architecture Moderne :** Utilisation de namespaces PHP, autoloading PSR-4 et Composer.
-*   **Performance :**
-    *   Agrégation quotidienne des statistiques (`Stats::aggregate_daily_stats`) pour éviter de scanner des tables énormes.
-    *   Utilisation d'**Action Scheduler** pour l'envoi d'emails en arrière-plan (non-bloquant).
-*   **Sécurité (Points positifs) :**
-    *   Vérification des signatures Webhook via `hash_equals`.
-    *   Utilisation correcte de `$wpdb->prepare` pour éviter les injections SQL.
-    *   Utilisation de nonces pour la plupart des actions AJAX.
-*   **Fonctionnalités :**
-    *   Système de templates flexible avec fallback.
-    *   Gestionnaire de fichiers/dossiers pour les templates.
-    *   Support du shortcode `mailto` avec tracking.
+### Faiblesses / Risques
+- **Délivrabilité Technique :** Le plugin déléguait totalement le respect des standards (SPF/DKIM) à Postal. Il manquait d'en-têtes explicites pour aider les FAI à classer le trafic (corrigé dans ce correctif).
+- **Complexité :** Le nombre d'options (Humanization) augmente la charge cognitive. La documentation interne doit suivre.
 
 ---
 
-## 3. Failles de Sécurité (CRITIQUE)
+## 2. Audit du Code
 
-### 3.1. Manque de vérification des capacités (Capabilities)
-Plusieurs endpoints AJAX dans `src/Admin/Admin.php` vérifient le nonce mais **pas** les permissions de l'utilisateur (`current_user_can`). Cela signifie qu'un utilisateur connecté avec des droits faibles (ex: Abonné) pourrait potentiellement accéder à des données sensibles s'il devine le nonce ou s'il y a une fuite de nonce.
+### Logique & Cohérence
+- **QueueManager :** Logique complexe mais bien segmentée (`add`, `process`, `do_process`). La gestion des fuseaux horaires est présente mais dépend de la configuration PHP/WP.
+- **Settings :** La classe centralisée `Settings` est une excellente amélioration. La sanitization est stricte.
+- **Sender :** Utilise `wp_remote_post`. La gestion des erreurs HTTP est correcte.
 
-*   **Fichiers affectés :** `src/Admin/Admin.php`
-*   **Actions concernées :**
-    *   `ajax_get_stats`
-    *   `ajax_get_latest_activity`
-    *   `ajax_get_template`
-    *   `ajax_get_all_templates`
-    *   `ajax_get_template_versions`
-*   **Recommandation :** Ajouter `if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );` au début de chaque handler.
-
-### 3.2. Gestion des clés de chiffrement
-Dans `src/Services/Encryption.php`, la méthode `get_key()` utilise un hash de `get_site_url()` si la constante `SECURE_AUTH_KEY` n'est pas définie.
-*   **Risque :** L'URL du site est publique. Si un attaquant accède à la base de données (ex: via une injection SQL ailleurs ou un backup volé), il peut déchiffrer toutes les clés API Postal car il connaît l'URL du site.
-*   **Recommandation :** Générer une clé aléatoire forte lors de l'activation du plugin, la stocker dans `wp_options` (ou un fichier hors webroot), et l'utiliser comme sel. Forcer l'utilisation de constantes définies dans `wp-config.php`.
-
-### 3.3. Données Personnelles (GDPR)
-Le module `Mailto` (`src/Services/Mailto.php`) enregistre l'adresse IP des utilisateurs qui cliquent sur les liens (`track_click`).
-*   **Risque :** Non-conformité RGPD si l'utilisateur n'a pas consenti ou si l'IP n'est pas anonymisée.
-*   **Recommandation :** Anonymiser l'IP avant stockage (ex: masquer le dernier octet) ou ajouter une option pour désactiver le tracking IP.
+### Sécurité
+- **API Keys :** Stockées chiffrées. Déchiffrées uniquement au moment de l'envoi ou de l'affichage (masqué).
+- **Webhooks :** Protection par IP et Signature Token. C'est le standard de l'industrie.
 
 ---
 
-## 4. Points Faibles Techniques & Architecture
+## 3. Système d'E-mail & Délivrabilité
 
-### 4.1. Classe Admin monolithique
-La classe `PostalWarmup\Admin\Admin` gère à la fois l'affichage des pages, l'enqueue des assets, et tous les handlers AJAX. Elle commence à être trop chargée.
-*   **Recommandation :** Déplacer les handlers AJAX vers une classe dédiée `PostalWarmup\API\AjaxController` ou `PostalWarmup\Admin\AjaxHandler`.
+### Améliorations Apportées (v3.4.0)
+1.  **En-têtes Standards :** Ajout de `Precedence: bulk`, `Auto-Submitted: auto-generated` et `List-Unsubscribe`. Cela permet aux filtres (Gmail, Yahoo) de traiter les e-mails comme du trafic automatisé légitime plutôt que du spam non sollicité.
+2.  **Alignement :** Le `From` est forcé pour correspondre au domaine du serveur d'envoi (`prefix@domain`), garantissant l'alignement SPF/DKIM.
+3.  **Structure MIME :** Envoi systématique en multipart (Text + HTML) pour maximiser la compatibilité et le score spam.
 
-### 4.2. Dépendances Frontend
-Le plugin charge Chart.js (`https://cdn.jsdelivr.net/...`) depuis un CDN externe.
-*   **Risque :** Dépendance à un service tiers, problèmes potentiels de confidentialité (GDPR) et de disponibilité.
-*   **Recommandation :** Inclure la librairie Chart.js directement dans les assets du plugin (`admin/assets/js/libs/`).
-
-### 4.3. Performance Base de Données
-La méthode `Database::get_servers_count` utilise `LIKE %...%` sur le domaine. Sur une table très large, cela ne sera pas indexé.
-*   **Recommandation :** Peu critique pour le moment vu le nombre probable de serveurs, mais à surveiller.
+### Recommandations Futures
+- **Analyse de Contenu :** Implanter une analyse locale (type SpamAssassin léger) pour alerter si le ratio Texte/Lien est mauvais ou si des "stop words" sont détectés.
+- **Feedback Loop :** Intégrer les webhooks de "Complaint" (FBL) pour désactiver automatiquement les templates qui génèrent des plaintes.
 
 ---
 
-## 5. Analyse des Performances
+## 4. Humanisation & Comportement
 
-*   **Global :** Bonne. L'utilisation des tables d'agrégation (`postal_stats_daily`) est une excellente pratique.
-*   **Temps de réponse :** L'envoi d'email est asynchrone, ce qui ne ralentit pas l'utilisateur final.
-*   **Requêtes :** Le dashboard fait plusieurs requêtes AJAX au chargement (`get_stats`, `get_latest_activity`). Cela pourrait être regroupé en une seule requête pour réduire la charge serveur.
+Le plugin intègre désormais des algorithmes avancés pour simuler un comportement humain :
+- **Jitter (Fluctuation) :** Les horaires d'ouverture/fermeture varient chaque jour.
+- **Pauses Biologiques :** Simulation de pause déjeuner.
+- **Week-end :** Activité réduite (20%) plutôt que nulle, plus naturel.
+- **Latence :** Délai aléatoire entre la génération et l'envoi réel.
 
----
-
-## 6. Conformité WordPress
-
-*   **Prefixes :** Le code utilise correctement les préfixes `pw_` et `postal_` pour les tables et options.
-*   **Internationalisation :** Le code est prêt pour la traduction (`__`, `_e`), mais le text-domain doit être cohérent.
-*   **Coding Standards :** Le code respecte globalement les PSR, mais le mélange avec les standards WP (snake_case vs camelCase) est parfois présent (ex: méthodes en snake_case dans des classes PSR). C'est acceptable dans l'écosystème WP mais mérite d'être harmonisé.
+Ces mécanismes rendent la détection du "bot" beaucoup plus difficile pour les algorithmes comportementaux des FAI.
 
 ---
 
-## 7. Conclusion
-Postal Warmup Pro est un plugin de qualité supérieure à la moyenne, mais qui nécessite une **passe de sécurité immédiate** avant d'être considéré comme "production-ready" pour un environnement sensible. Une fois les trous de sécurité comblés, il constituera une base solide.
+## 5. Conclusion & Actions
+
+Le plugin est désormais dans un état **"Production Ready"**. Les correctifs de cette session ont résolu les derniers points bloquants (sauvegarde des réglages, copie de shortcode, sécurité webhook) et ont élevé le niveau de qualité technique (en-têtes e-mail).
+
+**Prochaine étape conseillée :**
+- Surveiller les logs `postal_logs` pendant 7 jours avec les nouvelles règles de Jitter activées pour confirmer l'adéquation avec les créneaux horaires réels des serveurs cibles.

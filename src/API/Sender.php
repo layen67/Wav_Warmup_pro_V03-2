@@ -109,7 +109,10 @@ class Sender {
 			'html_body'  => $prepared['html'],
 			'headers'    => [ 
 				'X-Warmup-Source'   => 'PostalWarmupPro-v' . PW_VERSION,
-				'X-Warmup-Template' => $template_name
+				'X-Warmup-Template' => $template_name,
+				'Precedence'        => 'bulk',
+				'Auto-Submitted'    => 'auto-generated',
+				'List-Unsubscribe'  => "<mailto:unsubscribe@$domain?subject=unsubscribe>",
 			]
 		];
 

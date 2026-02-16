@@ -174,7 +174,9 @@ class QueueManager {
             if ($offset_end < -0.5) $end_h--;
         }
 
-        $slots = range( $start_h, $end_h );
+        // Exclude the end hour (stop strictly at X:00)
+        // e.g. 08 to 20 means 08:00 to 19:59.
+        $slots = range( $start_h, max($start_h, $end_h - 1) );
 
         // 2. Fetch Pending Items
         $now_mysql = current_time( 'mysql' );

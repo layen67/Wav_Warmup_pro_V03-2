@@ -337,8 +337,17 @@
              
             // Copy shortcode 
             $(document).on('click', '.pw-copy-shortcode-btn', (e) => { 
-                const $input = $(e.currentTarget).prev('input'); 
-                this.copyToClipboard($input.val(), $(e.currentTarget)); 
+                const $card = $(e.currentTarget).closest('.pw-template-card');
+                const name = $card.data('template-name');
+                const label = $card.find('.pw-default-label-input').val() || 'Contact';
+                const format = $card.find('.pw-shortcode-select').val();
+
+                let shortcode = `[warmup_mailto name="${name}" label="${label}"]`;
+                if (format === 'button') {
+                    shortcode = `[warmup_mailto name="${name}" label="${label}" style="button"]`;
+                }
+
+                this.copyToClipboard(shortcode, $(e.currentTarget));
             }); 
              
             // Filters 

@@ -17,6 +17,9 @@ $stats = PW_Stats::get_dashboard_stats();
 $servers = PW_Stats::get_servers_stats();
 
 $widgets = Settings::get( 'dashboard_widgets', ['sent', 'success_rate', 'volume', 'active_servers'] );
+if ( ! is_array( $widgets ) ) {
+    $widgets = [];
+}
 $refresh_rate = (int) Settings::get( 'dashboard_refresh', 30 );
 ?>
 

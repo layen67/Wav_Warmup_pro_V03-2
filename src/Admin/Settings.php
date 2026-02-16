@@ -201,6 +201,12 @@ class Settings {
 					$output[$key] = absint( $input[$key] );
 				} elseif ( $type === 'boolean' ) {
 					$output[$key] = (bool) $input[$key];
+				} elseif ( $type === 'array' ) {
+					if ( is_array( $input[$key] ) ) {
+						$output[$key] = array_map( 'sanitize_text_field', $input[$key] );
+					} else {
+						$output[$key] = [];
+					}
 				} else {
 					if ( in_array( $key, [ 'custom_headers', 'webhook_ip_whitelist' ] ) ) {
 						$output[$key] = sanitize_textarea_field( $input[$key] );

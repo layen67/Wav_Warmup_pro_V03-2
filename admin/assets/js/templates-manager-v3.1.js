@@ -339,12 +339,13 @@
             $(document).on('click', '.pw-copy-shortcode-btn', (e) => { 
                 const $card = $(e.currentTarget).closest('.pw-template-card');
                 const name = $card.data('template-name');
-                const label = $card.find('.pw-default-label-input').val() || 'Contact';
                 const format = $card.find('.pw-shortcode-select').val();
 
-                let shortcode = `[warmup_mailto name="${name}" label="${label}"]`;
+                // Use 'template' attribute as it is the standard and confirmed working
+                // Remove 'label' to allow dynamic retrieval from template settings
+                let shortcode = `[warmup_mailto template="${name}"]`;
                 if (format === 'button') {
-                    shortcode = `[warmup_mailto name="${name}" label="${label}" style="button"]`;
+                    shortcode = `[warmup_mailto template="${name}" style="button"]`;
                 }
 
                 this.copyToClipboard(shortcode, $(e.currentTarget));

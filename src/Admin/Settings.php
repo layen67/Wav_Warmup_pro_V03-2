@@ -270,6 +270,7 @@ class Settings {
 			'security' => [
 				'label' => __( 'Sécurité', 'postal-warmup' ),
 				'fields' => [
+					'webhook_url' => [ 'label' => __( 'URL du Webhook', 'postal-warmup' ), 'type' => 'copyable', 'desc' => __( 'Configurez cette URL dans votre serveur Postal.', 'postal-warmup' ) ],
 					'webhook_strict_mode' => [ 'label' => __( 'Webhook Strict Mode', 'postal-warmup' ), 'type' => 'checkbox' ],
 					'webhook_ip_whitelist' => [ 'label' => __( 'IP Whitelist (Webhooks)', 'postal-warmup' ), 'type' => 'textarea', 'desc' => __( 'Une IP/CIDR par ligne.', 'postal-warmup' ) ],
 					'webhook_rate_limit_minute' => [ 'label' => __( 'Rate Limit (Minute)', 'postal-warmup' ), 'type' => 'number' ],
@@ -463,6 +464,18 @@ class Settings {
 					echo '<label style="display:block; margin-bottom: 5px;">';
 					echo '<input type="checkbox" name="' . $name . '[]" value="' . esc_attr( $key ) . '" ' . $checked . '> ' . esc_html( $label );
 					echo '</label>';
+				}
+				break;
+			case 'copyable':
+				// Computed value, ignoring $value from DB
+				if ( $id === 'webhook_url' ) {
+					$url = get_rest_url( null, 'postal-warmup/v1/webhook' );
+					echo '<div style="display:flex; gap:10px;">';
+					echo '<input type="text" value="' . esc_attr( $url ) . '" class="large-text code" readonly id="pw-webhook-url">';
+					echo '<button type="button" class="button button-secondary" onclick="navigator.clipboard.writeText(document.getElementById(\'pw-webhook-url\').value); alert(\'' . __( 'Copié !', 'postal-warmup' ) . '\');">';
+					echo '<span class="dashicons dashicons-admin-page" style="line-height:28px;"></span>';
+					echo '</button>';
+					echo '</div>';
 				}
 				break;
 		}

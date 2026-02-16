@@ -47,8 +47,14 @@ class Mailto {
 	}
 
 	public function render_shortcode( $atts, $content = null ) {
+		// Support 'name' alias for 'template'
+		if ( isset( $atts['name'] ) && empty( $atts['template'] ) ) {
+			$atts['template'] = $atts['name'];
+		}
+
 		$atts = shortcode_atts( array(
 			'template' => 'support',
+			'name'     => '', // Alias for template
 			'label'    => 'Nous contacter',
 			'email'    => '', // Override destination email
 			'subject'  => '', // Override subject

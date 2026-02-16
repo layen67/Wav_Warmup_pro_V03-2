@@ -45,6 +45,11 @@ class Settings {
 		'retry_delay_base' => 60,
 		'retry_delay_max' => 900,
 		'cron_method' => 'wp_cron',
+		'schedule_random_delay_min' => 2,
+		'schedule_random_delay_max' => 10,
+		'human_jitter_enabled' => false,
+		'weekend_mode' => 'off', // off, reduced, full
+		'lunch_break_enabled' => false,
 		'queue_pause_threshold' => 50, // % failure rate
 		'queue_resume_delay' => 30, // minutes
 

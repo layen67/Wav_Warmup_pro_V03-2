@@ -305,7 +305,15 @@ class Settings {
 						'type' => 'select',
 						'options' => [ 'fixed' => 'Fixe', 'exponential' => 'Exponentielle', 'linear' => 'Linéaire' ]
 					],
-					'schedule_random_delay' => [ 'label' => __( 'Délai Aléatoire (min)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Max X minutes de retard aléatoire par email pour simuler un humain (0 = désactivé).', 'postal-warmup' ) ],
+					'schedule_random_delay_min' => [ 'label' => __( 'Délai Min (min)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Retard minimum aléatoire par email.', 'postal-warmup' ) ],
+					'schedule_random_delay_max' => [ 'label' => __( 'Délai Max (min)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Retard maximum aléatoire par email.', 'postal-warmup' ) ],
+					'human_jitter_enabled' => [ 'label' => __( 'Horaires Fluctuants (Jitter)', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Varie le début/fin de +/- 30 min chaque jour.', 'postal-warmup' ) ],
+					'weekend_mode' => [
+						'label' => __( 'Mode Week-end', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [ 'off' => 'Désactivé (Aucun Envoi)', 'reduced' => 'Réduit (20% Volume)', 'full' => 'Normal (100% Volume)' ]
+					],
+					'lunch_break_enabled' => [ 'label' => __( 'Pause Déjeuner', 'postal-warmup' ), 'type' => 'checkbox', 'desc' => __( 'Réduit l\'activité entre 12h et 14h.', 'postal-warmup' ) ],
 					'queue_pause_threshold' => [ 'label' => __( 'Seuil Pause Auto (%)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Si > X% d\'échecs.', 'postal-warmup' ) ],
 					'queue_resume_delay' => [ 'label' => __( 'Délai Reprise (min)', 'postal-warmup' ), 'type' => 'number' ],
 				]

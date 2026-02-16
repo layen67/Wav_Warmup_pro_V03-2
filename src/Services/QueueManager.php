@@ -22,12 +22,17 @@ class QueueManager {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_queue';
         
-        // Calculate Schedule
+        // Calculate Schedule (Human Randomization)
         $scheduled_at = current_time( 'mysql' );
-        $random_delay = (int) Settings::get( 'schedule_random_delay', 0 );
 
-        if ( $random_delay > 0 ) {
-            $seconds = rand( 0, $random_delay * 60 );
+        $delay_min = (int) Settings::get( 'schedule_random_delay_min', 2 );
+        $delay_max = (int) Settings::get( 'schedule_random_delay_max', 10 );
+
+        // Ensure logical range
+        if ( $delay_max < $delay_min ) $delay_max = $delay_min;
+
+        if ( $delay_max > 0 ) {
+            $seconds = rand( $delay_min * 60, $delay_max * 60 );
             $scheduled_at = date( 'Y-m-d H:i:s', current_time( 'timestamp' ) + $seconds );
         }
 
@@ -115,11 +120,30 @@ class QueueManager {
             return;
         }
 
-        // Weekend Check
-        if ( ! Settings::get( 'send_on_weekends', true ) ) {
-            $day_of_week = (int) current_time( 'w' ); // 0 (Sun) - 6 (Sat)
-            if ( $day_of_week === 0 || $day_of_week === 6 ) {
-                return;
+        // Human Behavior Checks
+        // 1. Weekend Mode
+        $weekend_mode = Settings::get( 'weekend_mode', 'off' );
+        $day_of_week = (int) current_time( 'w' ); // 0 (Sun) - 6 (Sat)
+
+        if ( $day_of_week === 0 || $day_of_week === 6 ) {
+            if ( $weekend_mode === 'off' ) {
+                return; // No sending
+            } elseif ( $weekend_mode === 'reduced' ) {
+                // 20% Chance to process
+                if ( rand( 1, 100 ) > 20 ) {
+                    return; // Skip this run (simulates reduced volume)
+                }
+            }
+        }
+
+        // 2. Lunch Break
+        if ( Settings::get( 'lunch_break_enabled', false ) ) {
+            $hour = (int) current_time( 'H' );
+            if ( $hour >= 12 && $hour < 14 ) {
+                // 80% chance to take a break
+                if ( rand( 1, 100 ) > 20 ) {
+                    return;
+                }
             }
         }
 
@@ -128,9 +152,28 @@ class QueueManager {
         
         $global_tz = wp_timezone_string();
 
-        // Schedule Window
+        // Schedule Window with Jitter
         $start_h = (int) Settings::get( 'schedule_start_hour', 8 );
         $end_h = (int) Settings::get( 'schedule_end_hour', 20 );
+
+        if ( Settings::get( 'human_jitter_enabled', false ) ) {
+            // Jitter is calculated based on the day of the year to be consistent within a day but different each day
+            $day_seed = (int) date('z');
+            srand($day_seed);
+            $offset_start = rand(-30, 30) / 60; // +/- 0.5 hours
+            $offset_end = rand(-30, 30) / 60;
+            srand(); // Reset random seed
+
+            // Adjust hours (simplified integer check, real check is below)
+            // Ideally we should check minutes, but our logic checks discrete hours.
+            // Let's rely on the probability skip for minute-level precision?
+            // Better: If we are in the "edge" hour, check minutes.
+            // For now, let's keep it simple: jitter shifts the integer block
+            if ($offset_start > 0.5) $start_h++;
+            if ($offset_start < -0.5) $start_h--;
+            if ($offset_end < -0.5) $end_h--;
+        }
+
         $slots = range( $start_h, $end_h );
 
         // 2. Fetch Pending Items

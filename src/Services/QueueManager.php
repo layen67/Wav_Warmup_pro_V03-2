@@ -22,6 +22,15 @@ class QueueManager {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_queue';
         
+        // Calculate Schedule
+        $scheduled_at = current_time( 'mysql' );
+        $random_delay = (int) Settings::get( 'schedule_random_delay', 0 );
+
+        if ( $random_delay > 0 ) {
+            $seconds = rand( 0, $random_delay * 60 );
+            $scheduled_at = date( 'Y-m-d H:i:s', current_time( 'timestamp' ) + $seconds );
+        }
+
         $data = [
             'server_id'    => $server_id,
             'template_id'  => $meta['template_id'] ?? null,
@@ -29,7 +38,7 @@ class QueueManager {
             'from_email'   => $from,
             'subject'      => $subject,
             'status'       => 'pending',
-            'scheduled_at' => current_time( 'mysql' ), // Default: ASAP
+            'scheduled_at' => $scheduled_at,
             'created_at'   => current_time( 'mysql' ),
             'meta'         => json_encode( $meta ),
             'attempts'     => 0,

@@ -305,6 +305,7 @@ class Settings {
 						'type' => 'select',
 						'options' => [ 'fixed' => 'Fixe', 'exponential' => 'Exponentielle', 'linear' => 'Linéaire' ]
 					],
+					'schedule_random_delay' => [ 'label' => __( 'Délai Aléatoire (min)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Max X minutes de retard aléatoire par email pour simuler un humain (0 = désactivé).', 'postal-warmup' ) ],
 					'queue_pause_threshold' => [ 'label' => __( 'Seuil Pause Auto (%)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Si > X% d\'échecs.', 'postal-warmup' ) ],
 					'queue_resume_delay' => [ 'label' => __( 'Délai Reprise (min)', 'postal-warmup' ), 'type' => 'number' ],
 				]

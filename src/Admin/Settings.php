@@ -54,7 +54,8 @@ class Settings {
 		'queue_resume_delay' => 30, // minutes
 
 		// Warmup
-		'warmup_mode' => 'linear',
+		'warmup_strategy_mode' => 'smart', // linear, smart
+		'warmup_mode' => 'linear', // Legacy? Kept for compatibility or remove? Let's keep for now.
 		'warmup_start' => 10,
 		'warmup_max' => 1000,
 		'warmup_days' => 30,
@@ -326,6 +327,15 @@ class Settings {
 			'warmup' => [
 				'label' => __( 'Warmup', 'postal-warmup' ),
 				'fields' => [
+					'warmup_strategy_mode' => [
+						'label' => __( 'Mode de Warmup', 'postal-warmup' ),
+						'type' => 'select',
+						'options' => [
+							'smart' => 'Adaptatif Intelligent (Recommandé)',
+							'linear' => 'Linéaire Simple'
+						],
+						'desc' => __( 'L\'adaptatif ajuste le volume journalier par ISP selon les taux de succès réels. Le linéaire force l\'augmentation.', 'postal-warmup' )
+					],
 					'default_from_name' => [ 'label' => __( 'From Name par défaut', 'postal-warmup' ), 'type' => 'text' ],
 					'default_from_email' => [ 'label' => __( 'From Email par défaut', 'postal-warmup' ), 'type' => 'text' ],
 					'custom_headers' => [ 'label' => __( 'Headers Personnalisés', 'postal-warmup' ), 'type' => 'textarea', 'desc' => __( 'Un par ligne (ex: List-Unsubscribe: <...>)', 'postal-warmup' ) ],

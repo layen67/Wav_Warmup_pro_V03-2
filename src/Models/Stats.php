@@ -3,6 +3,7 @@
 namespace PostalWarmup\Models;
 
 use PostalWarmup\Models\Database;
+use PostalWarmup\Services\WarmupEngine;
 
 class Stats {
 
@@ -78,16 +79,19 @@ class Stats {
 		) );
 		
 		if ( ! $row ) {
-			// Initialize if missing
+			// Initialize if missing: Use global server warmup day to prevent regression
+			$server_day = $wpdb->get_var( $wpdb->prepare( "SELECT warmup_day FROM {$wpdb->prefix}postal_servers WHERE id = %d", $server_id ) );
+			$init_day = $server_day ? (int)$server_day : 1;
+
 			$wpdb->insert( $table, [
 				'server_id' => $server_id,
 				'isp_key' => $isp_key,
-				'warmup_day' => 1,
+				'warmup_day' => $init_day,
 				'sent_today' => 0,
 				'score' => 100
 			] );
 			return (object) [
-				'warmup_day' => 1,
+				'warmup_day' => $init_day,
 				'sent_today' => 0,
 				'score' => 100,
 				'fails_today' => 0
@@ -122,8 +126,13 @@ class Stats {
 		
 		if ( $limit <= 0 ) {
 			$settings = get_option('pw_warmup_settings', []);
-			$start_vol = isset($settings['start_volume']) ? (int)$settings['start_volume'] : 10;
-			$growth = isset($settings['growth_rate']) ? (int)$settings['growth_rate'] : 20;
+
+			// Handle Legacy vs New keys
+			$start_vol = isset($settings['warmup_start']) ? (int)$settings['warmup_start'] : 10;
+			if (isset($settings['start_volume'])) $start_vol = (int)$settings['start_volume'];
+
+			$growth = isset($settings['warmup_increase_percent']) ? (int)$settings['warmup_increase_percent'] : 20;
+			if (isset($settings['growth_rate'])) $growth = (int)$settings['growth_rate'];
 			
 			$day = isset($server['warmup_day']) ? (int)$server['warmup_day'] : 1;
 			if ($day < 1) $day = 1;
@@ -645,14 +654,9 @@ class Stats {
 	}
 
 	public static function increment_warmup_day() {
-		global $wpdb;
-		$table = $wpdb->prefix . 'postal_servers';
-		// Only increment for active servers
-		$wpdb->query( "UPDATE $table SET warmup_day = warmup_day + 1 WHERE active = 1" );
-
-		// V3: Increment ISP specific warmup days and reset daily counters
-		$table_isp = $wpdb->prefix . 'postal_server_isp_stats';
-		$wpdb->query( "UPDATE $table_isp SET warmup_day = warmup_day + 1, sent_today = 0, delivered_today = 0, fails_today = 0" );
+		// Delegate to WarmupEngine which handles both Linear and Smart modes
+		// This replaces the old raw SQL updates with logic-driven updates
+		WarmupEngine::process_daily_advancement();
 	}
 
 	public static function aggregate_daily_stats() {

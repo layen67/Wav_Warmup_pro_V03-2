@@ -11,9 +11,10 @@ class StrategyEngine {
      * 
      * @param array $strategy La configuration de la stratégie
      * @param int $day Le jour actuel de warmup (1-indexed)
+     * @param string|null $isp L'ISP cible (optionnel) pour override
      * @return int La limite d'envoi pour ce jour
      */
-    public static function calculate_daily_limit( $strategy, $day ) {
+    public static function calculate_daily_limit( $strategy, $day, $isp = null ) {
         // Allow strategy to be null/empty, fallback to global settings
         $config = is_array( $strategy ) ? ($strategy['config'] ?? []) : [];
         

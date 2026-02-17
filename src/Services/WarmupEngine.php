@@ -36,27 +36,53 @@ class WarmupEngine {
 		$servers = Database::get_servers( true ); // Only active servers
 
 		if ( ! empty( $servers ) ) {
+			// Optimisation : Récupérer les ISPs une seule fois
+			global $wpdb;
+			$table_isps = $wpdb->prefix . 'postal_isps';
+			$isps = $wpdb->get_results( "SELECT isp_key FROM $table_isps WHERE active = 1", ARRAY_A );
+
 			foreach ( $servers as $server ) {
-				self::process_server_advancement( $server );
+				// Utilisation d'Action Scheduler pour éviter le timeout si possible
+				if ( function_exists( 'as_schedule_single_action' ) ) {
+					// Planifie une action asynchrone pour chaque serveur
+					as_schedule_single_action( 'pw_process_server_warmup', [ 'server_id' => $server['id'], 'isps' => $isps ], 'postal-warmup' );
+				} else {
+					// Fallback synchrone
+					self::process_server_advancement( $server, $isps );
+				}
 			}
+		}
+	}
+
+	/**
+	 * Callback pour Action Scheduler
+	 */
+	public static function process_server_warmup_action( $server_id, $isps = [] ) {
+		$server = Database::get_server( $server_id );
+		if ( $server && $server['active'] ) {
+			self::process_server_advancement( $server, $isps );
 		}
 	}
 
 	/**
 	 * Traite un serveur spécifique
 	 */
-	private static function process_server_advancement( $server ) {
+	private static function process_server_advancement( $server, $isps = [] ) {
 		global $wpdb;
 		$server_id = $server['id'];
 
-		// Récupérer tous les ISP configurés dans le système
-		$table_isps = $wpdb->prefix . 'postal_isps';
-		$isps = $wpdb->get_results( "SELECT isp_key FROM $table_isps WHERE active = 1", ARRAY_A );
+		if ( empty( $isps ) ) {
+			$table_isps = $wpdb->prefix . 'postal_isps';
+			$isps = $wpdb->get_results( "SELECT isp_key FROM $table_isps WHERE active = 1", ARRAY_A );
+		}
 
 		$isp_days = [];
 		$table_stats = $wpdb->prefix . 'postal_server_isp_stats';
 
-		if ( empty( $isps ) ) return;
+		// Get Settings for Logic
+		$threshold_advance = (int) Settings::get('warmup_advance_threshold', 80);
+		$threshold_retreat = (int) Settings::get('warmup_retreat_threshold', 3);
+		$min_volume = (int) Settings::get('warmup_min_volume', 10);
 
 		foreach ( $isps as $isp ) {
 			$key = $isp['isp_key'];
@@ -69,7 +95,7 @@ class WarmupEngine {
 			$fails = (int) $stats->fails_today;
 
 			// Calcul du quota théorique pour ce jour spécifique
-			$current_day = (int) $stats->warmup_day;
+			$current_day = max( 1, (int) $stats->warmup_day ); // Safety check
 			$quota = self::get_isp_quota( $server, $key, $current_day );
 
 			$new_day = $current_day;
@@ -81,15 +107,15 @@ class WarmupEngine {
 			$error_rate = ($sent > 0) ? ($fails / $sent) * 100 : 0;
 
 			// 1. Protection Critique (Frein d'urgence)
-			// Si taux d'erreur > 3% (et volume significatif > 10 emails)
-			if ( $sent > 10 && $error_rate > 3 ) {
+			if ( $sent > $min_volume && $error_rate > $threshold_retreat ) {
 				// Recul fort (Minimum Day 1)
 				$new_day = max( 1, $current_day - 3 );
 				$action = 'retreat_critical';
 			}
 			// 2. Progression (Avance)
-			// Si on a rempli le quota à > 80% ET taux d'erreur < 1%
-			elseif ( $quota > 0 && $sent >= ($quota * 0.8) && $error_rate < 1 ) {
+			// Si on a rempli le quota à > 80% ET taux d'erreur < 1% (ou threshold safe disons < 1/3 de retreat?)
+			// Utilisons < 1% hardcodé ou configurable? Restons sur 1% comme "safe"
+			elseif ( $quota > 0 && $sent >= ($quota * ($threshold_advance / 100)) && $error_rate < 1 ) {
 				$new_day++;
 				$action = 'advance';
 			}
@@ -125,13 +151,22 @@ class WarmupEngine {
 			$isp_days[] = $new_day;
 
 			// Log de la décision si changement ou erreur
-			if ( Settings::get('enable_logging') && ($action !== 'stagnate' || $error_rate > 0) ) {
-				// Utiliser Database::insert_log car Logger n'est peut-être pas dispo ici (static context)
-				// Ou mieux, utiliser Logger si autoloadé
-				Database::insert_log([
-					'server_id' => $server_id,
-					'level' => ($action === 'retreat_critical') ? 'warning' : 'info',
-					'message' => "Warmup Engine ($key): Action=$action, Day $current_day -> $new_day (Sent: $sent/$quota, Err: " . round($error_rate, 1) . "%)"
+			// Utiliser Database::insert_log ou do_action pour observabilité
+			if ( $action !== 'stagnate' || $error_rate > 0 ) {
+				if ( Settings::get('enable_logging') ) {
+					Database::insert_log([
+						'server_id' => $server_id,
+						'level' => ($action === 'retreat_critical') ? 'warning' : 'info',
+						'message' => "Warmup Engine ($key): Action=$action, Day $current_day -> $new_day (Sent: $sent/$quota, Err: " . round($error_rate, 1) . "%)"
+					]);
+				}
+
+				// Fire hook for external observers (Slack, Email, etc)
+				// Arguments: Server ID, ISP Key, Old Day, New Day, Action, Metrics
+				do_action( 'pw_warmup_status_change', $server_id, $key, $current_day, $new_day, $action, [
+					'sent' => $sent,
+					'quota' => $quota,
+					'error_rate' => $error_rate
 				]);
 			}
 		}

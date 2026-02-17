@@ -60,6 +60,9 @@ class Settings {
 		'warmup_max' => 1000,
 		'warmup_days' => 30,
 		'warmup_increase_percent' => 20,
+		'warmup_advance_threshold' => 80, // % du quota pour avancer
+		'warmup_retreat_threshold' => 3, // % d'erreur pour reculer
+		'warmup_min_volume' => 10, // Emails minimum pour décider
 		'pause_bounce_rate' => 5,
 		'pause_spam_rate' => 1,
 		'pause_failure_rate' => 10,
@@ -338,6 +341,9 @@ class Settings {
 					],
 					'default_from_name' => [ 'label' => __( 'From Name par défaut', 'postal-warmup' ), 'type' => 'text' ],
 					'default_from_email' => [ 'label' => __( 'From Email par défaut', 'postal-warmup' ), 'type' => 'text' ],
+					'warmup_advance_threshold' => [ 'label' => __( 'Seuil Progression (%)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Volume requis (% du quota) pour passer au jour suivant.', 'postal-warmup' ) ],
+					'warmup_retreat_threshold' => [ 'label' => __( 'Seuil Régression (%)', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Taux d\'erreur déclenchant un recul.', 'postal-warmup' ) ],
+					'warmup_min_volume' => [ 'label' => __( 'Volume Min Décision', 'postal-warmup' ), 'type' => 'number', 'desc' => __( 'Minimum d\'envois requis pour évaluer la performance.', 'postal-warmup' ) ],
 					'custom_headers' => [ 'label' => __( 'Headers Personnalisés', 'postal-warmup' ), 'type' => 'textarea', 'desc' => __( 'Un par ligne (ex: List-Unsubscribe: <...>)', 'postal-warmup' ) ],
 					'bounce_handling_action' => [
 						'label' => __( 'Gestion des Bounces', 'postal-warmup' ),

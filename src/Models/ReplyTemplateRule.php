@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Models;
 
-declare(strict_types=1);
+
 
 class ReplyTemplateRule {
 

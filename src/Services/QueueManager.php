@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Database;
@@ -11,7 +13,7 @@ use PostalWarmup\Models\Stats;
 use PostalWarmup\Admin\ISPManager;
 use PostalWarmup\Admin\Settings;
 
-declare(strict_types=1);
+
 
 class QueueManager {
 

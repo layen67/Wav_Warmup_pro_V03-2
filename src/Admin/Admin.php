@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Admin;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Admin\Settings;
 
-declare(strict_types=1);
+
 
 /**
  * The admin-specific functionality of the plugin.

@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Services\Logger;
 
-declare(strict_types=1);
+
 
 /**
  * Service de mise à jour des templates depuis une source externe (si nécessaire)

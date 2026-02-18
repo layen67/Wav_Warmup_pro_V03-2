@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Core;
 
 use PostalWarmup\Admin\Admin;
@@ -15,7 +17,7 @@ use PostalWarmup\Models\Database;
 use PostalWarmup\Admin\ScenarioManager;
 use PostalWarmup\Admin\ReplyRuleManager;
 
-declare(strict_types=1);
+
 
 /**
  * The core plugin class.

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Stats;
@@ -7,7 +9,7 @@ use PostalWarmup\Services\EmailNotifications;
 use PostalWarmup\Models\Database;
 use PostalWarmup\Admin\Settings;
 
-declare(strict_types=1);
+
 
 /**
  * Conseiller de Warmup (Analyse de santé)

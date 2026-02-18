@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Admin;
 
 use PostalWarmup\Models\Database;
@@ -12,7 +14,7 @@ use PostalWarmup\Admin\Settings;
 use PostalWarmup\Admin\ISPManager;
 use PostalWarmup\Admin\StrategyManager;
 
-declare(strict_types=1);
+
 
 /**
  * Gestionnaire des requêtes AJAX

@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Core;
 
 use PostalWarmup\Services\Logger;
 use PostalWarmup\Admin\Settings;
 
-declare(strict_types=1);
+
 
 /**
  * Fired during plugin activation.

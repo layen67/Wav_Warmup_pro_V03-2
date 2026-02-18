@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Services;
 
 use PostalWarmup\API\WebhookHandler;
 
-declare(strict_types=1);
+
 
 /**
  * Dispatcher pour simuler ou relayer les webhooks

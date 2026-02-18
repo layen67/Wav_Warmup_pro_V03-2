@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Models;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Services\WarmupEngine;
 use PostalWarmup\Admin\Settings;
 
-declare(strict_types=1);
+
 
 class Stats {
 

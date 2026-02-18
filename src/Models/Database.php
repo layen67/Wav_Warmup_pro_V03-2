@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Models;
 
 use PostalWarmup\Services\Encryption;
 use PostalWarmup\Admin\Settings;
 
-declare(strict_types=1);
+
 
 /**
  * Classe de gestion de la base de données

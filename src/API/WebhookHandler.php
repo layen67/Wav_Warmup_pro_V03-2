@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\API;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Admin\Settings;
 use PostalWarmup\Services\Logger;
 
-declare(strict_types=1);
+
 
 /**
  * Gestionnaire des Webhooks entrants (Postal -> Plugin)

@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Admin;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Services\TemplateLoader;
 
-declare(strict_types=1);
+
 
 /**
  * Gestionnaire des Templates (CRUD)

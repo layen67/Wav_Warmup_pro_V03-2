@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\API;
 
 use PostalWarmup\Models\Database;
@@ -7,7 +9,7 @@ use PostalWarmup\Services\Logger;
 use PostalWarmup\Core\TemplateEngine;
 use PostalWarmup\Admin\Settings;
 
-declare(strict_types=1);
+
 
 /**
  * Classe d'envoi des emails via Postal

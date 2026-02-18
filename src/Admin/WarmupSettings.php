@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Admin;
 
-declare(strict_types=1);
+
 
 /**
  * Gestionnaire des réglages spécifiques au Warmup

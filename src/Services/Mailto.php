@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Services;
 
 use PostalWarmup\Services\TemplateLoader;
 use PostalWarmup\Admin\Settings;
 
-declare(strict_types=1);
+
 
 /**
  * Service de génération de shortcodes [warmup_mailto]

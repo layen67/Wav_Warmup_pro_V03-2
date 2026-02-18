@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Admin;
 
 use PostalWarmup\Models\Scenario;
 
-declare(strict_types=1);
+
 
 class ScenarioManager {
 

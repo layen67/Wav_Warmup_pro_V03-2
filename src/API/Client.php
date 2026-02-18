@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\API;
 
 use PostalWarmup\Admin\Settings;
 use PostalWarmup\Services\Logger;
 
-declare(strict_types=1);
+
 
 /**
  * Client API Postal (Requêtes sortantes)

@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Admin;
 
-declare(strict_types=1);
+
 
 class Settings {
 
@@ -138,7 +140,7 @@ class Settings {
 
 	private function migrate_old_options(): void {
 		$new = $this->defaults;
-		
+
 		$map = [
 			'pw_global_tag' => 'global_tag',
 			'pw_enable_logging' => 'enable_logging',

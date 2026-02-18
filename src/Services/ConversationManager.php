@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Database;
 
-declare(strict_types=1);
+
 
 class ConversationManager {
 

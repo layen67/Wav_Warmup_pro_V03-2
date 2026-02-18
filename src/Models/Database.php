@@ -5,14 +5,13 @@ namespace PostalWarmup\Models;
 use PostalWarmup\Services\Encryption;
 use PostalWarmup\Admin\Settings;
 
+declare(strict_types=1);
+
 /**
  * Classe de gestion de la base de données
  */
 class Database {
 
-	/**
-	 * Récupère tous les serveurs
-	 */
 	public static function get_servers( bool $only_active = false, string $orderby = '', string $order = '' ): array {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_servers';
@@ -20,7 +19,6 @@ class Database {
 		$where = $only_active ? "WHERE active = 1" : "";
 		$allowed_cols = [ 'id', 'domain', 'api_url', 'sent_count', 'success_count', 'error_count', 'last_used' ];
 		
-		// Use defaults from Settings if not provided
 		if ( empty( $orderby ) ) {
 			$orderby = Settings::get( 'default_sort_column', 'sent_count' );
 		}
@@ -35,25 +33,20 @@ class Database {
 		
 		$order = ( strtoupper( $order ) === 'DESC' ) ? 'DESC' : 'ASC';
 		
-		// Add LIMIT based on settings (optional for list, but good for performance)
 		$limit = (int) Settings::get( 'db_query_limit', 500 );
 		if ( $limit <= 0 ) $limit = 500;
 
 		$results = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $table $where ORDER BY $orderby $order LIMIT %d", $limit ), ARRAY_A );
 
-		// Décrypter les clés API
 		if ( $results ) {
 			foreach ( $results as &$server ) {
 				$server['api_key'] = Encryption::decrypt( $server['api_key'] );
 			}
 		}
 
-		return $results;
+		return $results ?: [];
 	}
 
-	/**
-	 * Récupère un serveur par ID
-	 */
 	public static function get_server( int $id ): ?array {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_servers';
@@ -67,9 +60,6 @@ class Database {
 		return $server;
 	}
 
-	/**
-	 * Récupère un serveur par domaine
-	 */
 	public static function get_server_by_domain( string $domain ): ?array {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_servers';
@@ -83,9 +73,6 @@ class Database {
 		return $server;
 	}
 
-	/**
-	 * Insère un nouveau serveur
-	 */
 	public static function insert_server( array $data ): int|bool {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_servers';
@@ -101,7 +88,6 @@ class Database {
 		
 		$data = wp_parse_args( $data, $defaults );
 
-		// Chiffrer la clé API
 		if ( ! empty( $data['api_key'] ) ) {
 			$data['api_key'] = Encryption::encrypt( $data['api_key'] );
 		}
@@ -110,25 +96,19 @@ class Database {
 		
 		if ( $result ) {
 			do_action( 'pw_server_added', $wpdb->insert_id );
-			return $wpdb->insert_id;
+			return (int) $wpdb->insert_id;
 		}
 		
 		return false;
 	}
 
-	/**
-	 * Met à jour un serveur
-	 */
 	public static function update_server( int $id, array $data ): bool {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_servers';
 		
 		$data['updated_at'] = current_time( 'mysql' );
 
-		// Chiffrer la clé API si elle est mise à jour
 		if ( ! empty( $data['api_key'] ) ) {
-			// Vérifier si elle est déjà chiffrée ou non (on re-chiffre toujours pour être sûr)
-			// Idéalement on ne devrait la chiffrer que si elle a changé, mais encrypt() est deterministe avec même key/iv (mais IV random)
 			$data['api_key'] = Encryption::encrypt( $data['api_key'] );
 		}
 		
@@ -142,9 +122,6 @@ class Database {
 		return false;
 	}
 
-	/**
-	 * Supprime un serveur
-	 */
 	public static function delete_server( int $id ): bool {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_servers';
@@ -159,15 +136,13 @@ class Database {
 		return false;
 	}
 
-	/**
-	 * Incrémente le compteur d'envois
-	 */
 	public static function increment_sent( string $domain, bool $success = true, ?float $response_time = null ): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_servers';
 		
 		$field = $success ? 'success_count' : 'error_count';
 		
+		// Use prepare strictly even for integers/identifiers if they come from args
 		$wpdb->query(
 			$wpdb->prepare(
 				"UPDATE $table 
@@ -180,9 +155,6 @@ class Database {
 		);
 	}
 
-	/**
-	 * Calcule les statistiques d'un serveur
-	 */
 	public static function get_server_stats( int $server_id, int $days = 7 ): array {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_stats';
@@ -208,9 +180,6 @@ class Database {
 		) ?: [];
 	}
 
-	/**
-	 * Enregistre des statistiques
-	 */
 	public static function record_stat( int $server_id, bool $success = true, ?float $response_time = null ): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_stats';
@@ -219,6 +188,9 @@ class Database {
 		$hour = (int) current_time( 'H' );
 		$success_field = $success ? 'success_count' : 'error_count';
 		
+		// Safe float conversion
+		$response_time = (float) $response_time;
+
 		$wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO $table 
@@ -237,9 +209,6 @@ class Database {
 		);
 	}
 
-	/**
-	 * Récupère les logs
-	 */
 	public static function get_logs( array $filters = [], int $per_page = 50, int $page = 1 ): array {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_logs';
@@ -262,17 +231,12 @@ class Database {
 		}
 		
 		$offset = ( $page - 1 ) * $per_page;
-		$where_values[] = $per_page;
-		$where_values[] = $offset;
-		
-		// Ensure LIMIT is respected but pagination handles it via per_page
-		// We should enforce max per_page from settings?
-		// No, pagination logic usually dictates explicit page size.
-		// But let's check db_query_limit to prevent abuse.
+
 		$max_limit = (int) Settings::get( 'db_query_limit', 500 );
 		if ( $per_page > $max_limit ) $per_page = $max_limit;
 
-		$where_values[ count($where_values) - 2 ] = $per_page; // Update limit in values array
+		$where_values[] = $per_page;
+		$where_values[] = $offset;
 
 		$sql = "SELECT * FROM $table $where ORDER BY created_at DESC LIMIT %d OFFSET %d";
 		
@@ -280,12 +244,9 @@ class Database {
 			$sql = $wpdb->prepare( $sql, $where_values );
 		}
 		
-		return $wpdb->get_results( $sql, ARRAY_A );
+		return $wpdb->get_results( $sql, ARRAY_A ) ?: [];
 	}
 
-	/**
-	 * Insère un log (Restore legacy logic)
-	 */
 	public static function insert_log( array $data ): bool {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_logs';
@@ -295,7 +256,6 @@ class Database {
 		];
 		$data = wp_parse_args( $data, $defaults );
 		
-		// Encode context if array
 		if ( isset( $data['context'] ) && is_array( $data['context'] ) ) {
 			$data['context'] = json_encode( $data['context'], JSON_UNESCAPED_UNICODE );
 		}
@@ -308,8 +268,8 @@ class Database {
 		$table = $wpdb->prefix . 'postal_servers';
 		$where = '';
 		if ( ! empty( $search ) ) {
-			$search = '%' . $wpdb->esc_like( $search ) . '%';
-			$where = $wpdb->prepare( "WHERE domain LIKE %s OR api_url LIKE %s", $search, $search );
+			$search_like = '%' . $wpdb->esc_like( $search ) . '%';
+			$where = $wpdb->prepare( "WHERE domain LIKE %s OR api_url LIKE %s", $search_like, $search_like );
 		}
 		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table $where" );
 	}
@@ -329,10 +289,10 @@ class Database {
 			ORDER BY l.created_at DESC 
 			LIMIT %d",
 			$limit
-		), ARRAY_A );
+		), ARRAY_A ) ?: [];
 	}
 
-	public static function update_detailed_metrics( ?string $template_name, ?int $server_id, string $event_type ): void {
+	public static function update_detailed_metrics( ?string $template_name, int $server_id, string $event_type ): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_metrics';
 		$table_tpl = $wpdb->prefix . 'postal_templates';

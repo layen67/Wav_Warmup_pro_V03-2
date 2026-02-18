@@ -1,44 +1,35 @@
-<?php
-/**
- * admin/partials/template-category-modal.php
- * Modal pour la création et modification des catégories
- */
-
-if (!defined('ABSPATH')) exit;
-?>
-
-<div id="pw-category-modal" class="pw-modal" style="display:none;">
+<div id="pw-category-modal" class="pw-modal">
     <div class="pw-modal-content">
         <div class="pw-modal-header">
-            <h2 id="pw-category-modal-title"><?php _e('Nouvelle Catégorie', 'postal-warmup'); ?></h2>
+            <h3 id="pw-category-modal-title">Gérer les catégories</h3>
             <button class="pw-modal-close">&times;</button>
         </div>
-        
-        <form id="pw-category-form">
-            <input type="hidden" id="pw-category-id" name="id">
-            
-            <div class="pw-form-group">
-                <label for="pw-category-name"><?php _e('Nom de la catégorie', 'postal-warmup'); ?></label>
-                <input type="text" id="pw-category-name" name="name" required placeholder="Ex: Newsletters, Transactionnel...">
-            </div>
-            
-            <div class="pw-form-group">
-                <label for="pw-category-parent"><?php _e('Catégorie parente', 'postal-warmup'); ?></label>
-                <select id="pw-category-parent" name="parent_id">
-                    <option value=""><?php _e('Aucune (Racine)', 'postal-warmup'); ?></option>
-                    <!-- Rempli en JS -->
-                </select>
-            </div>
-            
-            <div class="pw-form-group">
-                <label for="pw-category-color"><?php _e('Couleur', 'postal-warmup'); ?></label>
-                <input type="color" id="pw-category-color" name="color" value="#2271b1">
-            </div>
-        </form>
-        
+        <div class="pw-modal-body">
+            <form id="pw-category-form">
+                <input type="hidden" name="id" id="pw-category-id">
+
+                <div class="pw-form-group">
+                    <label>Nom du dossier</label>
+                    <input type="text" name="name" id="pw-category-name" class="widefat" required>
+                </div>
+
+                <div class="pw-form-group">
+                    <label>Dossier parent</label>
+                    <select name="parent_id" id="pw-category-parent" class="widefat">
+                        <option value="">Aucun (Racine)</option>
+                        <!-- Populated via JS -->
+                    </select>
+                </div>
+
+                <div class="pw-form-group">
+                    <label>Couleur</label>
+                    <input type="color" name="color" id="pw-category-color" value="#2271b1" style="width: 100%; height: 40px;">
+                </div>
+            </form>
+        </div>
         <div class="pw-modal-footer">
-            <button type="button" class="pw-btn pw-btn-secondary pw-modal-cancel"><?php _e('Annuler', 'postal-warmup'); ?></button>
-            <button type="button" class="pw-btn pw-btn-primary" id="pw-save-category-btn"><?php _e('Enregistrer', 'postal-warmup'); ?></button>
+            <button type="button" class="button pw-modal-cancel">Annuler</button>
+            <button type="button" class="button button-primary" id="pw-save-category-btn">Enregistrer</button>
         </div>
     </div>
 </div>

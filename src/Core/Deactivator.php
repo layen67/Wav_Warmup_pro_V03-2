@@ -2,21 +2,35 @@
 
 namespace PostalWarmup\Core;
 
-use PostalWarmup\Admin\Settings;
-use PostalWarmup\Services\Logger;
+declare(strict_types=1);
 
 /**
  * Fired during plugin deactivation.
  */
 class Deactivator {
 
-	public static function deactivate() {
-		wp_clear_scheduled_hook( 'pw_cleanup_old_logs' );
-		wp_clear_scheduled_hook( 'pw_cleanup_old_stats' );
-		wp_clear_scheduled_hook( 'pw_daily_report' );
+	public static function deactivate(): void {
+		self::unschedule_cron_jobs();
+		flush_rewrite_rules();
+	}
 
-		if ( Settings::get( 'log_auto_purge_deactivation', false ) ) {
-			Logger::clear_all_logs();
+	private static function unschedule_cron_jobs(): void {
+		$crons = [
+			'pw_process_queue',
+			'pw_warmup_daily_increment',
+			'pw_daily_report',
+			'pw_cleanup_old_logs',
+			'pw_cleanup_old_stats',
+			'pw_daily_stats_aggregation',
+			'pw_cleanup_queue',
+			'pw_advisor_check'
+		];
+
+		foreach ( $crons as $cron ) {
+			$timestamp = wp_next_scheduled( $cron );
+			if ( $timestamp ) {
+				wp_unschedule_event( $timestamp, $cron );
+			}
 		}
 	}
 }

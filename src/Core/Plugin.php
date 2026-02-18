@@ -10,13 +10,15 @@ use PostalWarmup\API\WebhookHandler;
 use PostalWarmup\API\Sender;
 use PostalWarmup\Services\Logger;
 
+declare(strict_types=1);
+
 /**
  * The core plugin class.
  */
 class Plugin {
 
-	protected $loader;
-	protected $version;
+	protected Loader $loader;
+	protected string $version;
 
 	public function __construct() {
 		$this->version = PW_VERSION;
@@ -28,7 +30,7 @@ class Plugin {
 		$this->define_security_hooks();
 	}
 
-	private function define_security_hooks() {
+	private function define_security_hooks(): void {
 		$this->loader->add_filter( 'nonce_life', $this, 'filter_nonce_life' );
 	}
 
@@ -40,12 +42,12 @@ class Plugin {
 		return $seconds;
 	}
 
-	private function set_locale() {
+	private function set_locale(): void {
 		$plugin_i18n = new i18n();
 		$this->loader->add_action( 'plugins_loaded', $plugin_i18n, 'load_plugin_textdomain' );
 	}
 
-	private function define_admin_hooks() {
+	private function define_admin_hooks(): void {
 		$plugin_admin = new Admin( $this->version );
 		$plugin_settings = new Settings();
 		$warmup_settings = new WarmupSettings();
@@ -81,7 +83,7 @@ class Plugin {
 		}
 	}
 
-	private function define_api_hooks() {
+	private function define_api_hooks(): void {
 		$webhook_handler = new WebhookHandler();
 		$this->loader->add_action( 'rest_api_init', $webhook_handler, 'register_routes' );
 		
@@ -102,7 +104,7 @@ class Plugin {
 	/**
 	 * Register class aliases for backward compatibility with legacy views/partials.
 	 */
-	private function register_aliases() {
+	private function register_aliases(): void {
 		$aliases = [
 			'PW_Database'         => 'PostalWarmup\\Models\\Database',
 			'PW_Stats'            => 'PostalWarmup\\Models\\Stats',
@@ -122,52 +124,22 @@ class Plugin {
 		}
 	}
 
-	private function define_cron_hooks() {
+	private function define_cron_hooks(): void {
+		// Just register the callbacks. Scheduling happens in Activator.
 		$this->loader->add_action( 'pw_cleanup_old_logs', 'PostalWarmup\Services\Logger', 'cleanup_old_logs' );
 		$this->loader->add_action( 'pw_daily_report', 'PostalWarmup\Services\EmailNotifications', 'send_daily_report' );
 		$this->loader->add_action( 'pw_cleanup_old_stats', 'PostalWarmup\Models\Stats', 'cleanup_old_stats' );
 		$this->loader->add_action( 'pw_daily_stats_aggregation', 'PostalWarmup\Models\Stats', 'aggregate_daily_stats' );
-		
-		// Queue Processing (Every Minute)
 		$this->loader->add_action( 'pw_process_queue', 'PostalWarmup\Services\QueueManager', 'process_queue' );
-		if ( ! wp_next_scheduled( 'pw_process_queue' ) ) {
-			wp_schedule_event( time(), 'every_minute', 'pw_process_queue' );
-		}
-
-		// Daily Warmup Increment
 		$this->loader->add_action( 'pw_warmup_daily_increment', 'PostalWarmup\Models\Stats', 'increment_warmup_day' );
-		if ( ! wp_next_scheduled( 'pw_warmup_daily_increment' ) ) {
-			wp_schedule_event( strtotime('tomorrow 00:00:00'), 'daily', 'pw_warmup_daily_increment' );
-		}
-
-		// Queue Cleanup (Daily)
 		$this->loader->add_action( 'pw_cleanup_queue', 'PostalWarmup\Services\QueueManager', 'cleanup' );
-		if ( ! wp_next_scheduled( 'pw_cleanup_queue' ) ) {
-			wp_schedule_event( time(), 'daily', 'pw_cleanup_queue' );
-		}
 
-		// Advisor Check (Hourly)
-		// Check global option before hooking
 		if ( get_option( 'pw_advisor_enabled', true ) ) {
 			$this->loader->add_action( 'pw_advisor_check', 'PostalWarmup\Services\WarmupAdvisor', 'run' );
-			if ( ! wp_next_scheduled( 'pw_advisor_check' ) ) {
-				wp_schedule_event( time(), 'hourly', 'pw_advisor_check' );
-			}
-		} else {
-			// Clean up if disabled
-			$timestamp = wp_next_scheduled( 'pw_advisor_check' );
-			if ( $timestamp ) {
-				wp_unschedule_event( $timestamp, 'pw_advisor_check' );
-			}
-		}
-
-		// Self-healing: Ensure daily report is scheduled if missing (Fix for existing installations)
-		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
-			wp_schedule_event( time(), 'daily', 'pw_daily_report' );
 		}
 	}
 
-	public function check_upgrade() {
+	public function check_upgrade(): void {
 		try {
 			if ( get_option( 'pw_version' ) !== PW_VERSION ) {
 				Activator::activate();
@@ -179,7 +151,7 @@ class Plugin {
 		}
 	}
 
-	public function run() {
+	public function run(): void {
 		$this->register_aliases();
 		$this->loader->run();
 	}

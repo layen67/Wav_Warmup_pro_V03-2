@@ -2,352 +2,193 @@
 
 namespace PostalWarmup\API;
 
-use WP_REST_Request;
-use WP_REST_Response;
-use WP_Error;
-use PostalWarmup\Services\Logger;
-use PostalWarmup\Services\QueueManager;
 use PostalWarmup\Models\Database;
 use PostalWarmup\Admin\Settings;
+use PostalWarmup\Services\Logger;
+
+declare(strict_types=1);
 
 /**
- * Gestionnaire de webhook REST API
+ * Gestionnaire des Webhooks entrants (Postal -> Plugin)
  */
 class WebhookHandler {
 
-	public function register_routes() {
-		register_rest_route( 'postal-warmup/v1', '/webhook', array(
+	public function register_routes(): void {
+		register_rest_route( 'postal-warmup/v1', '/webhook', [
 			'methods'             => 'POST',
-			'callback'            => array( $this, 'handle_webhook' ),
-			'permission_callback' => array( $this, 'verify_request' ),
-		) );
-		
-		register_rest_route( 'postal-warmup/v1', '/test', array(
-			'methods'             => 'GET',
-			'callback'            => array( $this, 'test_endpoint' ),
-			'permission_callback' => '__return_true',
-		) );
+			'callback'            => [ $this, 'handle_webhook' ],
+			'permission_callback' => '__return_true', // Validation manuelle via signature
+		] );
 	}
 
-	public function verify_request( WP_REST_Request $request ): bool|WP_Error {
-		$ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+	public function handle_webhook( \WP_REST_Request $request ) {
+		// 1. Rate Limiting (IP-based)
+		if ( $this->is_rate_limited() ) {
+			return new \WP_REST_Response( [ 'message' => 'Rate limit exceeded' ], 429 );
+		}
 
-		// 1. IP Whitelist Check
+		// 2. IP Whitelisting
 		$whitelist = Settings::get( 'webhook_ip_whitelist', '' );
 		if ( ! empty( $whitelist ) ) {
-			$allowed_ips = array_map( 'trim', explode( "\n", $whitelist ) );
-			$allowed = false;
-			foreach ( $allowed_ips as $allowed_ip ) {
-				// Simple IP check or CIDR logic could go here
-				if ( $ip === $allowed_ip || $this->cidr_match( $ip, $allowed_ip ) ) {
-					$allowed = true;
-					break;
-				}
-			}
-			if ( ! $allowed ) {
-				Logger::warning( "Webhook bloqué par IP Whitelist: $ip" );
-				return new WP_Error( 'forbidden', 'IP not allowed', [ 'status' => 403 ] );
+			$ip = $_SERVER['REMOTE_ADDR'] ?? '';
+			if ( ! $this->is_ip_allowed( $ip, $whitelist ) ) {
+				Logger::warning( "Webhook: IP bloquée ($ip)" );
+				return new \WP_REST_Response( [ 'message' => 'Forbidden' ], 403 );
 			}
 		}
 
-		// 2. Rate Limiting
-		if ( ! $this->check_rate_limit( $ip ) ) {
-			Logger::warning( "Webhook Rate Limit dépassé pour IP: $ip" );
-			return new WP_Error( 'too_many_requests', 'Rate limit exceeded', [ 'status' => 429 ] );
-		}
-
-		// 3. Strict Mode / Signature Check
+		// 3. Signature Verification
 		if ( Settings::get( 'webhook_strict_mode', true ) ) {
-			return $this->verify_signature( $request );
-		}
+			$secret = get_option( 'pw_webhook_secret' );
+			$token = $request->get_param( 'token' );
 
-		return true;
-	}
+			// V3: Support Postal Signature Header if configured?
+			// Postal sends X-Postal-Signature usually.
+			// Currently we use ?token=SECRET in the URL for simplicity as per Settings page logic.
 
-	private function check_rate_limit( $ip ) {
-		$minute_limit = (int) Settings::get( 'webhook_rate_limit_minute', 100 );
-		$hour_limit = (int) Settings::get( 'webhook_rate_limit_hour', 2000 );
-
-		$transient_min = 'pw_webhook_limit_min_' . md5( $ip );
-		$transient_hour = 'pw_webhook_limit_hour_' . md5( $ip );
-
-		$count_min = (int) get_transient( $transient_min );
-		$count_hour = (int) get_transient( $transient_hour );
-
-		if ( $count_min >= $minute_limit || $count_hour >= $hour_limit ) {
-			return false;
-		}
-
-		set_transient( $transient_min, $count_min + 1, 60 );
-		set_transient( $transient_hour, $count_hour + 1, 3600 );
-
-		return true;
-	}
-
-	private function cidr_match( $ip, $range ) {
-		if ( strpos( $range, '/' ) === false ) return false;
-		list( $subnet, $bits ) = explode( '/', $range );
-		$ip = ip2long( $ip );
-		$subnet = ip2long( $subnet );
-		$mask = -1 << ( 32 - $bits );
-		$subnet &= $mask;
-		return ( $ip & $mask ) == $subnet;
-	}
-
-	public function verify_signature( WP_REST_Request $request ): bool|WP_Error {
-		$secret = get_option( 'pw_webhook_secret' ); // Use option directly as it's the source of truth
-		
-		if ( empty( $secret ) ) {
-			$secret = wp_generate_password( 64, false );
-			update_option( 'pw_webhook_secret', $secret );
-		}
-		
-		$params = $request->get_query_params();
-		$token = isset( $params['token'] ) ? (string) $params['token'] : '';
-		
-		if ( empty( $token ) || ! hash_equals( $secret, $token ) ) {
-			$action = Settings::get( 'webhook_invalid_signature_action', 'log' );
-
-			if ( $action === 'log' || $action === 'notify' ) {
-				Logger::warning( 'Webhook : Token invalide ou manquant', [
-					'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-					'received_token' => substr( $token, 0, 5 ) . '...'
-				] );
+			if ( ! $secret || $token !== $secret ) {
+				$action = Settings::get( 'webhook_invalid_signature_action', 'log' );
+				if ( $action === 'log' || $action === 'notify' ) {
+					Logger::warning( 'Webhook: Signature invalide.' );
+				}
+				return new \WP_REST_Response( [ 'message' => 'Unauthorized' ], 401 );
 			}
-
-			// Always reject in strict mode
-			return new WP_Error( 'forbidden', 'Invalid token', [ 'status' => 403 ] );
 		}
-		
-		return true;
+
+		$payload = $request->get_json_params();
+		if ( empty( $payload ) ) {
+			return new \WP_REST_Response( [ 'message' => 'Empty payload' ], 400 );
+		}
+
+		// 4. Processing
+		if ( isset( $payload['event'] ) ) {
+			// Single event
+			$this->process_event( $payload );
+		} elseif ( isset( $payload['payload'] ) ) {
+			// Wrapped payload? Postal usually sends raw JSON or form-data.
+			// Assuming JSON structure from Postal docs.
+			// { "event": "MessageDeliveryFailed", "payload": { ... } }
+			$this->process_event( $payload );
+		} else {
+			// Batch or unknown?
+			Logger::info( 'Webhook: Format inconnu', $payload );
+		}
+
+		return new \WP_REST_Response( [ 'status' => 'processed' ], 200 );
 	}
 
-	public function handle_webhook( WP_REST_Request $request ) {
-		$data = $request->get_json_params();
-		
-		if ( empty( $data ) ) {
-			return new WP_REST_Response( [ 'status' => 'error', 'message' => 'Invalid JSON' ], 400 );
-		}
-		
-		// Events
-		if ( isset( $data['event'] ) ) {
-			$this->handle_event( $data );
-		} elseif ( isset( $data['rcpt_to'] ) ) {
-			// Incoming message (if configured to route to this URL)
-			$this->handle_incoming_message( $data );
-		}
-		
-		return new WP_REST_Response( [ 'status' => 'ok' ], 200 );
-	}
-
-	private function handle_event( $data ) {
-		$event = $data['event'] ?? '';
+	private function process_event( array $data ): void {
+		$event = $data['event'] ?? 'Unknown';
 		$payload = $data['payload'] ?? [];
 		
-		$ctx = $this->identify_context($payload);
-		$server_id = $ctx['server_id'];
-		$template = $ctx['template'];
-		$log_context = [ 
-			'server_id' => $server_id,
-			'template'  => $template
-		];
+		// Map Postal events to our logic
+		// Events: MessageSent, MessageDelivered, MessageDeliveryFailed, MessageBounced, MessageClicked, MessageOpened
 
-		switch ( $event ) {
-			case 'MessageSent':
-				// Optimization: Sender.php already records 'sent' on API success.
-				// We still update legacy metrics for safety but skip history insertion to avoid duplicates.
-				$this->track_metric( $payload, 'sent', $ctx, true );
-				break;
-			case 'MessageDelivered': // Explicitly handle Delivered
-				$this->track_metric( $payload, 'delivered', $ctx );
-				break;
-			case 'MessageDeliveryFailed':
-				$this->track_metric( $payload, 'failed', $ctx );
-				Logger::error( 'Échec de livraison', array_merge( $log_context, [ 'status' => 'failed' ] ) );
-				break;
-			case 'MessageBounced':
-				$this->track_metric( $payload, 'bounced', $ctx );
-				Logger::warning( 'Message rebondi', array_merge( $log_context, [ 'status' => 'bounced' ] ) );
+		$message_id = $payload['message_id'] ?? null; // Postal ID
+		$server_id = null; // Need to resolve from message_id if stored locally?
 
-				// Handle Bounce Action
+		// Problem: We store history by message_id, but how do we get server_id efficiently?
+		// We need to query postal_stats_history or postal_logs?
+		// V3 uses postal_stats_history which has index on message_id.
+
+		if ( ! $message_id ) return;
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_stats_history';
+
+		$history = $wpdb->get_row( $wpdb->prepare( "SELECT server_id, template_id FROM $table WHERE message_id = %s LIMIT 1", $message_id ), ARRAY_A );
+
+		if ( ! $history ) {
+			// Maybe logged in legacy logs?
+			// For now, ignore unknown messages (could be from other apps using same Postal server)
+			return;
+		}
+
+		$server_id = (int) $history['server_id'];
+		$template_id = $history['template_id'] ? (int) $history['template_id'] : null;
+		$template_name = null;
+		
+		if ( $template_id ) {
+			$template_name = $wpdb->get_var( $wpdb->prepare( "SELECT name FROM {$wpdb->prefix}postal_templates WHERE id = %d", $template_id ) );
+		}
+
+		// Dispatch to specific handlers
+		// Update detailed metrics
+		$mapped_event = $this->map_event( $event );
+
+		if ( $mapped_event ) {
+			// 1. Update Metrics
+			Database::update_detailed_metrics( $template_name, $server_id, $mapped_event );
+
+			// 2. Log History
+			Database::insert_stat_history([
+				'server_id'   => $server_id,
+				'template_id' => $template_id,
+				'message_id'  => $message_id,
+				'event_type'  => $mapped_event,
+				'timestamp'   => current_time( 'mysql' ),
+				'meta'        => json_encode( $payload )
+			]);
+
+			// 3. Update Real-time Status (Queue/Stats)
+			if ( $mapped_event === 'bounced' || $mapped_event === 'failed' ) {
+				Stats::record_stat( $server_id, false ); // Increment error count
+
+				// Handle suppression / cleanup?
+				// Logic moved to settings (bounce_handling_action)
 				$action = Settings::get( 'bounce_handling_action', 'mark_failed' );
-				if ( $action === 'remove' ) {
-					// Logic to remove from queue or suppression list integration
-					// Assuming QueueManager has a method or direct DB access here
-					// Ideally: QueueManager::handle_bounce($email, $server_id);
-				} elseif ( $action === 'notify' ) {
+				if ( $action === 'notify' ) {
 					// Trigger notification
 				}
-				break;
-			case 'MessageLinkClicked':
-				$this->track_metric( $payload, 'clicked', $ctx );
-				break;
-			case 'MessageLoaded':
-				$this->track_metric( $payload, 'opened', $ctx );
-				break;
-			case 'DomainDNSError':
-				$this->track_metric( $payload, 'dns_error', $ctx );
-				Logger::critical( 'Erreur DNS détectée par Postal', $log_context );
-				break;
-			default:
-				// Ignore others
+			}
 		}
-
-		// Hook for external integrations (e.g. WebhookDispatcher)
-		do_action( 'pw_postal_webhook_event', $event, $payload, $ctx );
 	}
 
-	private function identify_context( $payload ) {
-		$message = $payload['message'] ?? [];
-		$server_id = null;
-		$template_name = null;
-		$domain = null;
-
-		$headers = $message['headers'] ?? [];
-		$template_name = $headers['X-Warmup-Template'] ?? null;
-
-		if ( isset( $message['from'] ) ) {
-			list( $prefix, $d ) = $this->parse_email( $message['from'] );
-			$domain = $d;
-			if ( ! $template_name ) {
-				$template_name = $prefix; // Fallback
-			}
-		} elseif ( isset( $payload['domain'] ) ) {
-			$domain = $payload['domain'];
+	private function map_event( string $postal_event ): ?string {
+		switch ( $postal_event ) {
+			case 'MessageSent': return 'sent';
+			case 'MessageDelivered': return 'delivered';
+			case 'MessageDeliveryFailed': return 'failed';
+			case 'MessageBounced': return 'bounced';
+			case 'MessageOpened': return 'opened';
+			case 'MessageClicked': return 'clicked';
+			default: return null;
 		}
+	}
 
-		if ( $domain ) {
-			$server = Database::get_server_by_domain( $domain );
-			if ( $server ) {
-				$server_id = $server['id'];
-			}
+	private function is_rate_limited(): bool {
+		$ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+		$key = 'pw_webhook_limit_' . md5( $ip );
+		$limit = (int) Settings::get( 'webhook_rate_limit_minute', 100 );
+
+		$current = (int) get_transient( $key );
+		if ( $current >= $limit ) {
+			return true;
 		}
 		
-		return [ 
-			'server_id' => $server_id, 
-			'template' => $template_name, 
-			'domain' => $domain 
-		];
+		set_transient( $key, $current + 1, 60 );
+		return false;
 	}
 
-	private function handle_incoming_message( $data ) {
-		// Logic from original class-pw-webhook-handler.php
-		$id = $data['id'] ?? null;
-		$rcpt_to = $data['rcpt_to'] ?? '';
-		$mail_from = $data['mail_from'] ?? '';
-		$subject = $data['subject'] ?? '';
-
-		if ( empty( $rcpt_to ) ) return;
-
-		// Deduplication: Check if message ID already processed (valid 1 hour)
-		if ( $id ) {
-			$transient_key = 'pw_webhook_msg_' . $id;
-			if ( get_transient( $transient_key ) ) {
-				Logger::info( "Webhook ignoré (doublon)", [ 'message_id' => $id ] );
-				return;
-			}
-			set_transient( $transient_key, true, 3600 );
-		}
-
-		list( $prefix, $domain ) = $this->parse_email( $rcpt_to );
-		if ( ! $domain ) return;
-
-		$server = Database::get_server_by_domain( $domain );
-		if ( ! $server ) return;
-
-		// Loop Prevention: Do not reply if sender is one of our own servers
-		list( $from_prefix, $from_domain ) = $this->parse_email( $mail_from );
-		if ( $from_domain ) {
-			$sender_server = Database::get_server_by_domain( $from_domain );
-			if ( $sender_server ) {
-				Logger::warning( "Boucle détectée : Tentative de réponse à soi-même", [ 'from' => $mail_from, 'to' => $rcpt_to ] );
-				return;
+	private function is_ip_allowed( string $ip, string $whitelist ): bool {
+		$allowed_ips = array_map( 'trim', explode( "\n", $whitelist ) );
+		foreach ( $allowed_ips as $allowed ) {
+			if ( empty( $allowed ) ) continue;
+			if ( strpos( $allowed, '/' ) !== false ) {
+				// CIDR check
+				if ( $this->cidr_match( $ip, $allowed ) ) return true;
+			} else {
+				if ( $ip === $allowed ) return true;
 			}
 		}
-
-		Logger::info( "Message entrant", [ 'server_id' => $server['id'], 'from' => $mail_from, 'subject' => $subject ] );
-		
-		// Check limits and reply (via Queue)
-		// Lookup Template ID (Fix "Système" label issue)
-		global $wpdb;
-		$table_tpl = $wpdb->prefix . 'postal_templates';
-		$template_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table_tpl WHERE name = %s", $prefix ) );
-
-		// Meta data for queue
-		$meta = [
-			'domain' => $domain,
-			'prefix' => $prefix,
-			'template_id' => $template_id, // Pass ID to queue
-			'original_message_id' => $id
-		];
-
-		// Add to Queue instead of sending directly
-		QueueManager::add( $server['id'], $mail_from, $prefix . '@' . $domain, 'Re: ' . $subject, $meta );
+		return false;
 	}
 
-	private function parse_email( $email ) {
-		if ( preg_match( '/<(.+?)>/', $email, $matches ) ) {
-			$email = $matches[1];
+	private function cidr_match( $ip, $cidr ) {
+		list( $subnet, $mask ) = explode( '/', $cidr );
+		if ( ( ip2long( $ip ) & ~((1 << (32 - $mask)) - 1) ) == ip2long( $subnet ) ) {
+			return true;
 		}
-		$parts = explode( '@', trim( $email ), 2 );
-		return ( count( $parts ) === 2 ) ? $parts : [ '', '' ];
-	}
-
-	private function track_metric( $payload, $event_type, $ctx = null, $skip_history = false ) {
-		if ( $ctx === null ) {
-			$ctx = $this->identify_context( $payload );
-		}
-		
-		$server_id = $ctx['server_id'];
-		$template_name = $ctx['template'];
-		$domain = $ctx['domain'];
-
-		if ( $server_id ) {
-			// New Stats Architecture: Insert into postal_stats_history
-			if ( ! $skip_history ) {
-				global $wpdb;
-				$table_tpl = $wpdb->prefix . 'postal_templates';
-				$template_id = null;
-				if ( $template_name ) {
-					$template_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table_tpl WHERE name = %s", $template_name ) );
-				}
-
-				$message_id = $payload['original_message']['id'] ?? $payload['message']['id'] ?? null;
-
-				Database::insert_stat_history( [
-					'server_id'   => $server_id,
-					'template_id' => $template_id,
-					'message_id'  => $message_id,
-					'event_type'  => $event_type,
-					'timestamp'   => current_time( 'mysql' ),
-					'meta'        => json_encode( [ 'template_name' => $template_name ] )
-				] );
-			}
-
-			// Legacy metrics updates (kept for backward compat or if needed by charts until fully refactored)
-			Database::update_detailed_metrics( $template_name, $server_id, $event_type );
-			
-			// Fix: Also record global stats for relevant events
-			if ( $event_type === 'sent' || $event_type === 'delivered' ) {
-				Database::increment_sent( $domain, true );
-				Database::record_stat( $server_id, true );
-			} elseif ( in_array( $event_type, [ 'failed', 'bounced', 'dns_error' ] ) ) {
-				Database::increment_sent( $domain, false );
-				Database::record_stat( $server_id, false );
-			}
-		}
-	}
-
-	private function check_rate_limits( $server_id ) {
-		// Simplified rate limit check from DB logic
-		return true; 
-	}
-
-	public function test_endpoint() {
-		return new WP_REST_Response( [
-			'status' => 'ok',
-			'message' => 'Postal Warmup API is running',
-			'version' => PW_VERSION
-		], 200 );
+		return false;
 	}
 }

@@ -2,14 +2,16 @@
 
 namespace PostalWarmup\Admin;
 
+declare(strict_types=1);
+
 class Settings {
 
-	private $option_name = 'pw_settings';
+	private string $option_name = 'pw_settings';
 
 	// Default Settings Configuration
-	private $defaults = [
+	private array $defaults = [
 		// General
-		'sending_enabled' => true, // Global Sending Toggle
+		'sending_enabled' => true,
 		'global_tag' => 'warmup',
 		'disable_ip_logging' => false,
 		'enable_logging' => true,
@@ -55,7 +57,7 @@ class Settings {
 
 		// Warmup
 		'warmup_strategy_mode' => 'smart', // linear, smart
-		'warmup_mode' => 'linear', // Legacy? Kept for compatibility or remove? Let's keep for now.
+		'warmup_mode' => 'linear',
 		'warmup_start' => 10,
 		'warmup_max' => 1000,
 		'warmup_days' => 30,
@@ -120,27 +122,23 @@ class Settings {
 		'debug_mode' => false,
 	];
 
-	public function register_settings() {
-		// Register the single array option
+	public function register_settings(): void {
 		register_setting(
 			'postal-warmup-settings',
 			$this->option_name,
 			[ 'sanitize_callback' => [ $this, 'sanitize_settings' ] ]
 		);
 
-		// Migration: If pw_settings is empty, try to fill from old options
 		if ( false === get_option( $this->option_name ) ) {
 			$this->migrate_old_options();
 		}
 
-		// Register Sections & Fields based on active Tab
 		$this->register_all_sections();
 	}
 
-	private function migrate_old_options() {
+	private function migrate_old_options(): void {
 		$new = $this->defaults;
 		
-		// Map old keys to new keys
 		$map = [
 			'pw_global_tag' => 'global_tag',
 			'pw_enable_logging' => 'enable_logging',
@@ -168,40 +166,9 @@ class Settings {
 		update_option( $this->option_name, $new );
 	}
 
-	public function sanitize_settings( $input ) {
+	public function sanitize_settings( $input ): array {
 		$output = get_option( $this->option_name, $this->defaults );
 		if ( ! is_array( $output ) ) $output = $this->defaults;
-
-		// We assume all boolean fields from the active tab MUST be present in $input if they are checked.
-		// If they are missing, it means they were unchecked (for that tab).
-		// Problem: We don't know which tab was submitted just from $input.
-		// Solution: Check if at least one field from a tab is present, then assume that tab was submitted.
-		// Or better: Use a hidden field 'pw_settings_tab' in the form.
-		// But register_setting callback only gets the values.
-
-		// Alternative: Iterate over defaults. If default is boolean AND we can infer we are saving settings (always true here),
-		// we check if the key is missing. BUT we must be careful about partial updates.
-		// WP Settings API sends the whole array for the option group usually? No, only fields on page.
-		// Wait, 'pw_settings' is a single array option.
-		// The form sends `pw_settings[key]`.
-		// If I'm on Tab A, `pw_settings[field_B]` is NOT sent.
-		// So `isset($input['field_B'])` is false. If I set it to false, I overwrite Tab B settings.
-		// CRITICAL FIX: We need to know which fields were present on the screen.
-		// Workaround: We will rely on type checking.
-		// If a key is present, we update it.
-		// For checkboxes, we need a hidden field for each checkbox or a hidden list of fields.
-		// Standard WP way: Hidden input with same name before checkbox? No, array keys overwrite.
-		// Let's implement the "hidden field with list of keys" approach in render logic, OR simpler:
-		// Since we are rebuilding $output from existing options, we only update keys that are in $input?
-		// NO, that's exactly the bug: unchecked checkboxes are NOT in $input.
-
-		// Fix: In our form (partials/settings.php), we are using do_settings_sections.
-		// We can add a hidden field `pw_settings[_submitted]` with a dummy value to verify submission? No.
-
-		// Let's look at `admin/partials/settings.php`. We can add a hidden field there?
-		// Actually, standard practice for array options with checkboxes is tricky.
-		// We will modify `render_field` to include a hidden input for checkboxes with value '0'.
-		// This way, if unchecked, '0' is sent. If checked, '1' overwrites '0'.
 
 		foreach ( $this->defaults as $key => $default ) {
 			if ( isset( $input[$key] ) ) {
@@ -229,11 +196,10 @@ class Settings {
 		return $output;
 	}
 
-	private function register_all_sections() {
+	private function register_all_sections(): void {
 		$tabs = $this->get_tabs_config();
 
 		foreach ( $tabs as $tab_id => $tab ) {
-			// Use a unique page slug for each tab
 			$page_slug = 'postal-warmup-settings-' . $tab_id;
 
 			add_settings_section(
@@ -255,14 +221,14 @@ class Settings {
 						'type' => $field['type'],
 						'options' => $field['options'] ?? [],
 						'desc' => $field['desc'] ?? '',
-						'label_for' => 'pw_settings[' . $field_id . ']' // Accessibility
+						'label_for' => 'pw_settings[' . $field_id . ']'
 					]
 				);
 			}
 		}
 	}
 
-	public function get_tabs_config() {
+	public function get_tabs_config(): array {
 		return [
 			'general' => [
 				'label' => __( 'Général', 'postal-warmup' ),
@@ -453,11 +419,11 @@ class Settings {
 		];
 	}
 
-	public function section_callback( $args ) {
+	public function section_callback( $args ): void {
 		// echo '<p>Description for section</p>';
 	}
 
-	public function render_field( $args ) {
+	public function render_field( $args ): void {
 		$options = get_option( $this->option_name, $this->defaults );
 		if(!is_array($options)) $options = $this->defaults;
 
@@ -470,13 +436,12 @@ class Settings {
 			case 'email':
 			case 'number':
 			case 'color':
-				echo '<input type="' . $args['type'] . '" name="' . $name . '" value="' . esc_attr( $value ) . '" class="regular-text">';
+				echo '<input type="' . $args['type'] . '" name="' . $name . '" value="' . esc_attr( (string) $value ) . '" class="regular-text">';
 				break;
 			case 'textarea':
-				echo '<textarea name="' . $name . '" rows="5" cols="50" class="large-text code">' . esc_textarea( $value ) . '</textarea>';
+				echo '<textarea name="' . $name . '" rows="5" cols="50" class="large-text code">' . esc_textarea( (string) $value ) . '</textarea>';
 				break;
 			case 'checkbox':
-				// Add hidden field to ensure unchecked value is sent (overwritten by checkbox if checked)
 				echo '<input type="hidden" name="' . $name . '" value="0">';
 				echo '<input type="checkbox" name="' . $name . '" value="1" ' . checked( $value, true, false ) . '>';
 				break;
@@ -497,11 +462,9 @@ class Settings {
 				}
 				break;
 			case 'copyable':
-				// Computed value, ignoring $value from DB
 				if ( $id === 'webhook_url' ) {
 					$url = get_rest_url( null, 'postal-warmup/v1/webhook' );
 
-					// Append token for security (Strict Mode)
 					$secret = get_option( 'pw_webhook_secret' );
 					if ( empty( $secret ) ) {
 						$secret = wp_generate_password( 64, false );
@@ -531,13 +494,17 @@ class Settings {
 			return $options[$key];
 		}
 
-		// Fallbacks for critical values if DB is empty/corrupt
 		$defaults = [
 			'queue_batch_size' => 20,
 			'db_query_limit' => 500,
 			'default_sort_column' => 'sent_count',
 			'default_sort_order' => 'DESC',
 			'api_timeout' => 15,
+			'warmup_start' => 10,
+			'warmup_increase_percent' => 20,
+			'warmup_advance_threshold' => 80,
+			'warmup_retreat_threshold' => 3,
+			'warmup_min_volume' => 10,
 		];
 
 		return $default_override ?? ($defaults[$key] ?? null);

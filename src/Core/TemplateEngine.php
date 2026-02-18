@@ -120,8 +120,7 @@ class TemplateEngine {
 	}
 
 	public static function pick_random( $array ) {
-		if ( ! is_array( $array ) || empty( $array ) ) return '';
-		return $array[ array_rand( $array ) ];
+		return TemplateLoader::pick_random( $array );
 	}
 
 	/**

@@ -2,84 +2,76 @@
 
 namespace PostalWarmup\API;
 
-use PostalWarmup\Models\Database;
-use PostalWarmup\Services\Logger;
 use PostalWarmup\Admin\Settings;
-use WP_Error;
+use PostalWarmup\Services\Logger;
+
+declare(strict_types=1);
 
 /**
- * Client unifié pour l'API Postal
+ * Client API Postal (Requêtes sortantes)
  */
 class Client {
 
-	/**
-	 * Send a request to Postal API
-	 *
-	 * @param int $server_id The ID of the server in WP database.
-	 * @param string $endpoint The API endpoint (e.g., 'messages', 'suppression/list').
-	 * @param string $method GET, POST, DELETE.
-	 * @param array $data Data to send (for POST) or query params (for GET).
-	 * @return array|WP_Error Response data or error.
-	 */
-	public static function request( $server_id, $endpoint, $method = 'GET', $data = [] ) {
+	public static function request( int $server_id, string $endpoint, string $method = 'GET', array $data = [] ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_servers';
+
+		$server = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $server_id ), ARRAY_A );
 		
-		$server = Database::get_server( $server_id );
 		if ( ! $server ) {
-			return new WP_Error( 'invalid_server', __( 'Serveur introuvable.', 'postal-warmup' ) );
+			return new \WP_Error( 'server_not_found', 'Serveur introuvable' );
 		}
 
-		$api_url = rtrim( $server['api_url'], '/' ) . '/' . ltrim( $endpoint, '/' );
-		// Note: Database::get_server already handles decryption of api_key
+		// Decrypt API Key if not already handled by Database model (Database model handles it on get_server but raw query here?)
+		// Database::get_server decodes. But here we use raw query.
+		// Use Database::get_server to be consistent and safe.
+		$server = \PostalWarmup\Models\Database::get_server( $server_id );
+		if ( ! $server ) return new \WP_Error( 'server_not_found', 'Serveur introuvable' );
+
+		$api_url = rtrim( $server['api_url'], '/' );
 		$api_key = $server['api_key'];
+		$url = $api_url . '/api/v1/' . $endpoint;
 
 		$args = [
-			'headers' => [
+			'method'    => $method,
+			'headers'   => [
 				'X-Server-API-Key' => $api_key,
-				'Content-Type'     => 'application/json',
-				'Accept'           => 'application/json'
+				'Content-Type'     => 'application/json'
 			],
-			'method'  => $method,
-			'timeout' => (int) Settings::get( 'api_timeout', 15 )
+			'timeout'   => (int) Settings::get( 'api_timeout', 15 ),
+			'sslverify' => true
 		];
 
-		if ( $method === 'GET' && ! empty( $data ) ) {
-			$api_url = add_query_arg( $data, $api_url );
-		} elseif ( $method !== 'GET' && ! empty( $data ) ) {
-			$args['body'] = json_encode( $data );
+		if ( ! empty( $data ) ) {
+			if ( $method === 'GET' ) {
+				$url = add_query_arg( $data, $url );
+			} else {
+				$args['body'] = json_encode( $data );
+			}
 		}
 
-		$response = wp_remote_request( $api_url, $args );
+		try {
+			$response = wp_remote_request( $url, $args );
 
-		if ( is_wp_error( $response ) ) {
-			return $response;
+			if ( is_wp_error( $response ) ) {
+				Logger::error( "API Error ($endpoint): " . $response->get_error_message() );
+				return $response;
+			}
+
+			$code = wp_remote_retrieve_response_code( $response );
+			$body = wp_remote_retrieve_body( $response );
+			$json = json_decode( $body, true );
+
+			if ( $code >= 200 && $code < 300 ) {
+				return $json['data'] ?? $json; // Some endpoints return direct data, others wrapped
+			}
+
+			Logger::warning( "API Failed ($code): " . ($json['data']['message'] ?? $body) );
+			return new \WP_Error( 'api_error', $json['data']['message'] ?? "Erreur HTTP $code" );
+
+		} catch ( \Throwable $e ) {
+			Logger::error( "API Exception: " . $e->getMessage() );
+			return new \WP_Error( 'api_exception', $e->getMessage() );
 		}
-
-		$code = wp_remote_retrieve_response_code( $response );
-		$body = wp_remote_retrieve_body( $response );
-		$result = json_decode( $body, true );
-
-		if ( $code >= 400 ) {
-			$msg = isset( $result['data']['message'] ) ? $result['data']['message'] : ( isset( $result['message'] ) ? $result['message'] : 'Erreur API' );
-			
-			Logger::error( "Erreur API Postal ($code)", [
-				'server_id' => $server_id,
-				'url'       => $api_url,
-				'method'    => $method,
-				'response'  => $body
-			]);
-
-			return new WP_Error( 'api_error', "HTTP $code: $msg" );
-		}
-
-		if ( json_last_error() !== JSON_ERROR_NONE ) {
-			Logger::error( "Erreur JSON Postal", [ 'body' => $body ] );
-			return new WP_Error( 'json_error', __( 'Réponse JSON invalide.', 'postal-warmup' ) );
-		}
-
-		if ( isset( $result['status'] ) && $result['status'] === 'success' ) {
-			return $result['data'] ?? [];
-		}
-		
-		return $result;
 	}
 }

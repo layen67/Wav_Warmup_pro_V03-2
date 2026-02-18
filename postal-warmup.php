@@ -14,6 +14,8 @@
  * Domain Path: /languages
  */
 
+declare(strict_types=1);
+
 use PostalWarmup\Core\Plugin;
 use PostalWarmup\Core\Activator;
 use PostalWarmup\Core\Deactivator;
@@ -53,7 +55,7 @@ if ( file_exists( PW_PLUGIN_DIR . 'vendor/woocommerce/action-scheduler/action-sc
 /**
  * Activation
  */
-function activate_postal_warmup() {
+function activate_postal_warmup(): void {
 	Activator::activate();
 }
 register_activation_hook( __FILE__, 'activate_postal_warmup' );
@@ -61,7 +63,7 @@ register_activation_hook( __FILE__, 'activate_postal_warmup' );
 /**
  * Désactivation
  */
-function deactivate_postal_warmup() {
+function deactivate_postal_warmup(): void {
 	Deactivator::deactivate();
 }
 register_deactivation_hook( __FILE__, 'deactivate_postal_warmup' );
@@ -69,7 +71,7 @@ register_deactivation_hook( __FILE__, 'deactivate_postal_warmup' );
 /**
  * Démarrage
  */
-function run_postal_warmup() {
+function run_postal_warmup(): void {
 	if ( ! class_exists( 'PostalWarmup\Core\Plugin' ) ) {
 		// Log error if possible or just exit silently to avoid white screen
 		error_log( 'Postal Warmup Pro: Plugin class not found. Autoload issue?' );

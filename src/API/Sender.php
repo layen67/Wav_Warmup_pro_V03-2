@@ -7,23 +7,18 @@ use PostalWarmup\Services\Logger;
 use PostalWarmup\Core\TemplateEngine;
 use PostalWarmup\Admin\Settings;
 
+declare(strict_types=1);
+
 /**
  * Classe d'envoi des emails via Postal
  */
 class Sender {
 
-	/**
-	 * Enregistre les hooks pour Action Scheduler
-	 */
-	public function init() {
+	public function init(): void {
 		add_action( 'pw_send_email_async', array( $this, 'process_queue' ), 10, 6 );
 	}
 
-	/**
-	 * Envoie un email via Postal (Asynchrone via Action Scheduler)
-	 */
-	public static function send( $to, $domain, $prefix = null, $server = null ) {
-		
+	public static function send( string $to, string $domain, ?string $prefix = null, ?array $server = null ): array {
 		if ( ! $server ) {
 			$server = Database::get_server_by_domain( $domain );
 			if ( ! $server ) {
@@ -40,10 +35,24 @@ class Sender {
 				'to'          => $to,
 				'domain'      => $domain,
 				'prefix'      => $prefix,
-				'server_id'   => $server['id'],
-				'retry_count' => 0
+				'server_id'   => (int)$server['id'],
+				'retry_count' => 0,
+				'handle_retry'=> false // Sender does not handle retry in async mode, QueueManager does? No, async here means fire and forget from e.g. manual test.
+				// Wait, if manual test triggers this, we want result?
+				// If scheduled, it runs later.
+				// QueueManager calls process_queue directly (sync).
+				// This method 'send' is used for immediate/test sends.
 			);
 			
+			// If we schedule it, we can't return success immediately unless we just say 'queued'.
+			// For tests, we might want sync.
+			// Let's assume 'send' is for test/manual mainly. QueueManager uses 'process_queue'.
+
+			// Wait, if QueueManager uses 'process_queue', then 'send' is just a wrapper?
+			// QueueManager calls `new Sender()->process_queue(...)`.
+
+			// So `send` is a static helper for other parts of the app.
+
 			as_schedule_single_action( time(), 'pw_send_email_async', $args, 'postal-warmup' );
 			
 			Logger::info( "Email mis en file d'attente", [
@@ -56,13 +65,10 @@ class Sender {
 		
 		// Fallback synchrone
 		$sender = new self();
-		return $sender->process_queue( $to, $domain, $prefix, $server['id'], 0 );
+		return $sender->process_queue( $to, $domain, $prefix, (int)$server['id'], 0 );
 	}
 
-	/**
-	 * Worker
-	 */
-	public function process_queue( $to, $domain, $prefix, $server_id, $retry_count = 0, $handle_retry = true ) {
+	public function process_queue( string $to, string $domain, string $prefix, int $server_id, int $retry_count = 0, bool $handle_retry = true ): array {
 		
 		$server = Database::get_server( $server_id );
 		if ( ! $server ) {
@@ -70,27 +76,17 @@ class Sender {
 			return [ 'error' => 'Serveur introuvable' ];
 		}
 
-		// Use TemplateEngine to prepare everything
 		$prepared = TemplateEngine::prepare_template( $prefix, $domain, $prefix, $to );
 		$template_name = $prepared['name'];
 
-		// 1. From Email Customization
-		$default_from = Settings::get( 'default_from_email', '' );
-		$default_name = Settings::get( 'default_from_name', '' );
-
-		$from_email = $prefix . '@' . $domain; // Default behavior
-		if ( ! empty( $default_from ) ) {
-			// Replace if setting is forced (or use setting as fallback if logic allows)
-			// Requirement says "Default from email", implying fallback.
-			// But Sender logic constructs it from prefix+domain.
-			// Let's assume current logic is primary, settings are fallback if empty (which rarely happens here).
-			// However, user might want to override.
-			// Let's keep existing logic as primary for warmup (randomized prefixes).
-		}
+		$from_email = $prefix . '@' . $domain;
 
 		$from_name = $prepared['from_name'];
-		if ( empty( $from_name ) && ! empty( $default_name ) ) {
-			$from_name = $default_name;
+		if ( empty( $from_name ) ) {
+			$default_name = (string) Settings::get( 'default_from_name', '' );
+			if ( ! empty( $default_name ) ) {
+				$from_name = $default_name;
+			}
 		}
 
 		Logger::info( "Worker: Traitement envoi email", [
@@ -116,8 +112,7 @@ class Sender {
 			]
 		];
 
-		// 2. Custom Headers Injection
-		$custom_headers = Settings::get( 'custom_headers', '' );
+		$custom_headers = (string) Settings::get( 'custom_headers', '' );
 		if ( ! empty( $custom_headers ) ) {
 			$lines = explode( "\n", $custom_headers );
 			foreach ( $lines as $line ) {
@@ -137,18 +132,18 @@ class Sender {
 			$payload['tag'] = sanitize_text_field( $global_tag );
 		}
 
+		// Use apply_filters with correct types
 		$payload = apply_filters( 'pw_email_payload', $payload, $prepared, [] );
 
 		$result = self::send_request( $server, $payload, $retry_count + 1, $template_name );
 		
-		$response_time = isset( $result['response_time'] ) ? $result['response_time'] : 0;
+		$response_time = isset( $result['response_time'] ) ? (float)$result['response_time'] : 0.0;
 
 		if ( $result['success'] ) {
-			// New Stats Logic: Insert into History
 			$message_id = $result['response']['data']['message_id'] ?? null;
 			Database::insert_stat_history( [
 				'server_id'   => $server['id'],
-				'template_id' => $prepared['id'], // Can be null if file/system
+				'template_id' => $prepared['id'] ?? null,
 				'message_id'  => $message_id,
 				'email_from'  => $from_email,
 				'event_type'  => 'sent',
@@ -157,73 +152,36 @@ class Sender {
 			] );
 
 			Database::increment_sent( $domain, true, $response_time );
-			Database::record_stat( $server['id'], true, $response_time );
+			Database::record_stat( (int)$server['id'], true, $response_time );
 			return $result;
 		}
 		
 		Database::increment_sent( $domain, false, $response_time );
-		Database::record_stat( $server['id'], false, $response_time );
-		
-		if ( ! $handle_retry ) {
-			return $result;
-		}
-
-		$max_retries = (int) Settings::get( 'max_retries', 3 );
-		
-		if ( $retry_count < $max_retries ) {
-			if ( function_exists( 'as_schedule_single_action' ) ) {
-				// Use configured strategy
-				$base = (int) Settings::get( 'retry_delay_base', 60 );
-				$strategy = Settings::get( 'retry_strategy', 'fixed' );
-				$max_delay = (int) Settings::get( 'retry_delay_max', 900 );
-
-				$delay = $base;
-				if ( $strategy === 'linear' ) {
-					$delay = $base * ($retry_count + 1);
-				} elseif ( $strategy === 'exponential' ) {
-					$delay = $base * pow( 2, $retry_count + 1 );
-				}
-
-				if ( $delay > $max_delay ) $delay = $max_delay;
-
-				as_schedule_single_action(
-					time() + $delay, 
-					'pw_send_email_async', 
-					array( $to, $domain, $prefix, $server_id, $retry_count + 1, true ), // Pass handle_retry=true explicitly
-					'postal-warmup'
-				);
-				Logger::warning( "Worker: Échec envoi, replanifié dans {$delay}s", [ 
-					'error'    => $result['error'],
-					'template' => $template_name
-				] );
-			}
-		} else {
-			Logger::error( "Worker: Abandon après $max_retries tentatives", [ 
-				'error'    => $result['error'],
-				'template' => $template_name
-			] );
-		}
+		Database::record_stat( (int)$server['id'], false, $response_time );
 		
 		return $result;
 	}
 
-
-	private static function send_request( $server, $payload, $attempt, $template_name = null ) {
+	private static function send_request( array $server, array $payload, int $attempt, ?string $template_name = null ): array {
 		$api_url = rtrim( $server['api_url'], '/' );
-		$api_key = $server['api_key']; // Already decrypted by Database model
+		$api_key = $server['api_key'];
 		$url = $api_url . '/send/message';
 		
 		$start_time = microtime( true );
 		
-		$response = wp_remote_post( $url, [
-			'headers' => [
-				'Content-Type'     => 'application/json',
-				'X-Server-API-Key' => $api_key
-			],
-			'body'      => json_encode( $payload ),
-			'timeout'   => (int) Settings::get( 'api_timeout', 15 ),
-			'sslverify' => true
-		]);
+		try {
+			$response = wp_remote_post( $url, [
+				'headers' => [
+					'Content-Type'     => 'application/json',
+					'X-Server-API-Key' => $api_key
+				],
+				'body'      => json_encode( $payload ),
+				'timeout'   => (int) Settings::get( 'api_timeout', 15 ),
+				'sslverify' => true
+			]);
+		} catch ( \Throwable $e ) {
+			return [ 'success' => false, 'error' => $e->getMessage(), 'response_time' => 0.0 ];
+		}
 		
 		$response_time = microtime( true ) - $start_time;
 		
@@ -278,19 +236,10 @@ class Sender {
 			'template'      => $template_name
 		]);
 		
-		// Optimization: Pre-fill postal_stats to ensure real-time accuracy even before Webhook
-		if ( $message_id ) {
-			// This part is handled by Logger::log -> Database::insert_log if configured for DB
-			// But for strict stats accuracy, we ensure 'sent' metric is recorded immediately
-			// Already done by Database::increment_sent and record_stat in process_queue, 
-			// but we can add message_id tracking if we had a detailed message table.
-			// Current structure relies on aggregated stats.
-		}
-		
 		return [ 'success' => true, 'response' => $data, 'response_time' => $response_time ];
 	}
 
-	public static function test_connection( $server_id ) {
+	public static function test_connection( int $server_id ): array {
 		$server = Database::get_server( $server_id );
 		if ( ! $server ) {
 			return [ 'success' => false, 'message' => __( 'Serveur introuvable', 'postal-warmup' ) ];

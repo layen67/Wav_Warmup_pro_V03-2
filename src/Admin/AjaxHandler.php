@@ -9,13 +9,17 @@ use PostalWarmup\API\Sender;
 use PostalWarmup\API\Client;
 use PostalWarmup\Admin\TemplateManager;
 use PostalWarmup\Admin\Settings;
+use PostalWarmup\Admin\ISPManager;
+use PostalWarmup\Admin\StrategyManager;
+
+declare(strict_types=1);
 
 /**
  * Gestionnaire des requêtes AJAX
  */
 class AjaxHandler {
 
-	private function check_permission() {
+	private function check_permission(): void {
 		$cap = Settings::get( 'required_capability', 'manage_options' );
 		if ( ! current_user_can( $cap ) ) {
 			wp_send_json_error( [ 'message' => 'Forbidden' ] );
@@ -23,7 +27,7 @@ class AjaxHandler {
 		}
 	}
 
-	public function ajax_test_server() {
+	public function ajax_test_server(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -42,7 +46,7 @@ class AjaxHandler {
 		}
 	}
 
-	public function ajax_regenerate_secret() {
+	public function ajax_regenerate_secret(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		$secret = wp_generate_password( 64, false );
@@ -50,7 +54,7 @@ class AjaxHandler {
 		wp_send_json_success( [ 'secret' => $secret, 'message' => __( 'Secret régénéré.', 'postal-warmup' ) ] );
 	}
 
-	public function ajax_get_dashboard_data() {
+	public function ajax_get_dashboard_data(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -69,31 +73,29 @@ class AjaxHandler {
 		] );
 	}
 
-	public function ajax_clear_logs() {
+	public function ajax_clear_logs(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		Logger::clear_all_logs();
 		wp_send_json_success( [ 'message' => __( 'Logs supprimés.', 'postal-warmup' ) ] );
 	}
 
-	public function ajax_get_all_templates() {
+	public function ajax_get_all_templates(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		wp_send_json_success( [ 'templates' => TemplateManager::get_all_with_meta() ] );
 	}
 
-	public function ajax_save_template() {
+	public function ajax_save_template(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
-		// Fix: Unslash POST data before processing to prevent backslash accumulation
 		$variants = isset($_POST['variants']) ? wp_unslash($_POST['variants']) : [];
 
 		$name = sanitize_text_field( $_POST['name'] ?? '' );
 		$data = [
 			'subject'   => array_map( 'sanitize_text_field', $variants['subject'] ?? [] ),
 			'text'      => array_map( 'sanitize_textarea_field', $variants['text'] ?? [] ),
-			// Fix HTML preservation: Use stripslashes to handle magic quotes but avoid wp_kses/sanitize to keep raw HTML intact
 			'html'      => $variants['html'] ?? [], // Already unslashed
 			'from_name' => array_map( 'sanitize_text_field', $variants['from_name'] ?? [] ),
 			'mailto_subject'   => array_map( 'sanitize_text_field', $variants['mailto_subject'] ?? [] ),
@@ -114,7 +116,7 @@ class AjaxHandler {
 		else wp_send_json_success( [ 'message' => 'Saved' ] );
 	}
 
-	public function ajax_delete_template() {
+	public function ajax_delete_template(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		$result = TemplateManager::delete_template( sanitize_text_field( $_POST['name'] ) );
@@ -122,7 +124,7 @@ class AjaxHandler {
 		else wp_send_json_success();
 	}
 
-	public function ajax_duplicate_template() {
+	public function ajax_duplicate_template(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -138,7 +140,7 @@ class AjaxHandler {
 		}
 	}
 	
-	public function ajax_get_template() {
+	public function ajax_get_template(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		$tpl = TemplateManager::get_template( sanitize_text_field( $_POST['name'] ) );
@@ -146,7 +148,7 @@ class AjaxHandler {
 		else wp_send_json_error( [ 'message' => 'Not found' ] );
 	}
 
-	public function ajax_get_template_stats() {
+	public function ajax_get_template_stats(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -158,7 +160,7 @@ class AjaxHandler {
 		wp_send_json_success( [ 'stats' => $stats ] );
 	}
 
-	public function ajax_save_category() {
+	public function ajax_save_category(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		$id = TemplateManager::save_category( 
@@ -170,48 +172,48 @@ class AjaxHandler {
 		wp_send_json_success( [ 'id' => $id ] );
 	}
 
-	public function ajax_delete_category() {
+	public function ajax_delete_category(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		TemplateManager::delete_category( (int)$_POST['id'] );
 		wp_send_json_success();
 	}
 
-	public function ajax_get_categories() {
+	public function ajax_get_categories(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		wp_send_json_success( [ 'tree' => TemplateManager::get_folders_tree() ] );
 	}
 
-	public function ajax_toggle_favorite() {
+	public function ajax_toggle_favorite(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		TemplateManager::toggle_favorite( (int)$_POST['template_id'], filter_var( $_POST['favorite'], FILTER_VALIDATE_BOOLEAN ) );
 		wp_send_json_success();
 	}
 
-	public function ajax_move_template() {
+	public function ajax_move_template(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		TemplateManager::move_template( (int)$_POST['template_id'], (int)$_POST['folder_id'] );
 		wp_send_json_success();
 	}
 
-	public function ajax_update_template_status() {
+	public function ajax_update_template_status(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		TemplateManager::update_status( (int)$_POST['template_id'], sanitize_key( $_POST['status'] ) );
 		wp_send_json_success();
 	}
 
-	public function ajax_get_template_versions() {
+	public function ajax_get_template_versions(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		$versions = TemplateManager::get_versions( (int)$_POST['template_id'] );
 		wp_send_json_success( [ 'versions' => $versions ] );
 	}
 
-	public function ajax_restore_template_version() {
+	public function ajax_restore_template_version(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		$result = TemplateManager::restore_version( (int)$_POST['version_id'] );
@@ -219,7 +221,7 @@ class AjaxHandler {
 		else wp_send_json_success();
 	}
 
-	public function ajax_clear_cache() {
+	public function ajax_clear_cache(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -230,7 +232,7 @@ class AjaxHandler {
 		wp_send_json_success( [ 'message' => __( 'Cache vidé.', 'postal-warmup' ) ] );
 	}
 
-	public function ajax_export_stats() {
+	public function ajax_export_stats(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
@@ -261,19 +263,19 @@ class AjaxHandler {
 		exit;
 	}
 
-	public function ajax_reorder_templates() {
+	public function ajax_reorder_templates(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		wp_send_json_success();
 	}
 
-	public function ajax_bulk_action_templates() {
+	public function ajax_bulk_action_templates(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		wp_send_json_success();
 	}
 
-	public function ajax_export_template() {
+	public function ajax_export_template(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
@@ -291,7 +293,7 @@ class AjaxHandler {
 		exit;
 	}
 
-	public function ajax_import_templates() {
+	public function ajax_import_templates(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
@@ -304,15 +306,13 @@ class AjaxHandler {
 		
 		if ( ! $data ) wp_send_json_error( [ 'message' => 'Invalid JSON' ] );
 
-		// Validation stricte de la structure
-		$required = [ 'subject', 'text', 'html' ]; // Basic requirements
+		$required = [ 'subject', 'text', 'html' ];
 		foreach ( $required as $field ) {
 			if ( ! isset( $data[ $field ] ) ) {
 				wp_send_json_error( [ 'message' => "Missing field: $field" ] );
 			}
 		}
 
-		// Validation des types (Doit être array pour les variants)
 		if ( ! is_array( $data['subject'] ) || ! is_array( $data['text'] ) || ! is_array( $data['html'] ) ) {
 			wp_send_json_error( [ 'message' => 'Invalid format: fields must be arrays' ] );
 		}
@@ -335,7 +335,7 @@ class AjaxHandler {
 		wp_send_json_success( [ 'message' => 'Imported as ' . $name ] );
 	}
 
-	public function ajax_get_suppression_list() {
+	public function ajax_get_suppression_list(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -346,7 +346,7 @@ class AjaxHandler {
 		else wp_send_json_success( [ 'list' => $result ] );
 	}
 
-	public function ajax_delete_suppression() {
+	public function ajax_delete_suppression(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -359,13 +359,13 @@ class AjaxHandler {
 		else wp_send_json_success();
 	}
 
-	public function ajax_get_server_health() {
+	public function ajax_get_server_health(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
 		$server_id = (int) $_POST['server_id'];
 		$start = microtime( true );
-		$result = Client::request( $server_id, 'messages', 'GET', [ 'count' => 1 ] ); // Light request
+		$result = Client::request( $server_id, 'messages', 'GET', [ 'count' => 1 ] );
 		$duration = round( ( microtime( true ) - $start ) * 1000, 2 );
 		
 		if ( is_wp_error( $result ) ) {
@@ -375,7 +375,7 @@ class AjaxHandler {
 		}
 	}
 
-	public function ajax_get_advanced_stats() {
+	public function ajax_get_advanced_stats(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
@@ -387,19 +387,13 @@ class AjaxHandler {
 		wp_send_json_success( [ 'charts' => $charts, 'heatmap' => $heatmap ] );
 	}
 
-	public function ajax_get_stats_table() {
+	public function ajax_get_stats_table(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
-
-		// Deprecated for new accordion, but kept if needed for fallback? 
-		// Actually, we replace it with get_server_detail as per plan.
-		// But let's add the new one and remove this old call.
-		// Wait, frontend still calls this? I will update frontend.
-		
 		wp_send_json_error( [ 'message' => 'Endpoint deprecated. Use pw_get_server_detail.' ] );
 	}
 
-	public function ajax_get_server_detail() {
+	public function ajax_get_server_detail(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
@@ -413,7 +407,7 @@ class AjaxHandler {
 		wp_send_json_success( [ 'stats' => $stats ] );
 	}
 
-	public function ajax_process_queue_manual() {
+	public function ajax_process_queue_manual(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -422,12 +416,9 @@ class AjaxHandler {
 		wp_send_json_success( [ 'message' => 'File d\'attente traitée' ] );
 	}
 
-	public function ajax_save_isp() {
+	public function ajax_save_isp(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
-		
-		// Map $_POST to ISPManager::save expected format
-		// Note: The form sends 'isp_label', 'domains' (string), etc.
 		
 		$result = ISPManager::save( $_POST );
 		
@@ -435,7 +426,7 @@ class AjaxHandler {
 		else wp_send_json_success( [ 'id' => $result ] );
 	}
 
-	public function ajax_delete_isp() {
+	public function ajax_delete_isp(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -443,7 +434,7 @@ class AjaxHandler {
 		wp_send_json_success();
 	}
 
-	public function ajax_save_strategy() {
+	public function ajax_save_strategy(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -453,7 +444,7 @@ class AjaxHandler {
 		else wp_send_json_success( [ 'id' => $result ] );
 	}
 
-	public function ajax_delete_strategy() {
+	public function ajax_delete_strategy(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 		
@@ -461,7 +452,7 @@ class AjaxHandler {
 		wp_send_json_success();
 	}
 
-	public function ajax_test_webhook() {
+	public function ajax_test_webhook(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
@@ -485,7 +476,7 @@ class AjaxHandler {
 		}
 	}
 
-	public function ajax_run_domscan_audit() {
+	public function ajax_run_domscan_audit(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
@@ -502,7 +493,7 @@ class AjaxHandler {
 		}
 	}
 
-	public function ajax_render_preview() {
+	public function ajax_render_preview(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
@@ -556,7 +547,7 @@ class AjaxHandler {
 		wp_send_json_success( [ 'rendered' => $rendered ] );
 	}
 
-	public function ajax_export_settings() {
+	public function ajax_export_settings(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
@@ -570,7 +561,7 @@ class AjaxHandler {
 		exit;
 	}
 
-	public function ajax_import_settings() {
+	public function ajax_import_settings(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
@@ -583,7 +574,6 @@ class AjaxHandler {
 		if ( ! is_array( $data ) ) wp_send_json_error( [ 'message' => 'Invalid JSON' ] );
 
 		// Validate known keys to prevent garbage injection
-		// We use sanitization from Settings class
 		$settings_instance = new Settings();
 		$sanitized = $settings_instance->sanitize_settings( $data );
 
@@ -592,19 +582,19 @@ class AjaxHandler {
 		wp_send_json_success( [ 'message' => 'Settings imported successfully.' ] );
 	}
 
-	public function ajax_reset_settings() {
+	public function ajax_reset_settings(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 
 		delete_option( 'pw_settings' );
 		// Trigger migration to restore defaults
 		$settings_instance = new Settings();
-		$settings_instance->register_settings(); // Triggers migration/defaults
+		$settings_instance->register_settings();
 
 		wp_send_json_success( [ 'message' => 'Settings reset to defaults.' ] );
 	}
 
-	public function ajax_purge_all_data() {
+	public function ajax_purge_all_data(): void {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		$this->check_permission();
 

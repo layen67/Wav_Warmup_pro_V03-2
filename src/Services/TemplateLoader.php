@@ -97,6 +97,7 @@ class TemplateLoader {
 			}
 		}
 
+		// If at least one item was weighted, use weighted logic
 		if ( $weighted && $total_weight > 0 ) {
 			$rand = mt_rand( 1, $total_weight );
 			$current = 0;
@@ -108,8 +109,19 @@ class TemplateLoader {
 			}
 		}
 
-		// Fallback to simple random
-		return $array[ array_rand( $array ) ];
+		// Fallback: Check if simple array or array of strings
+		// If $array contains sub-arrays that are NOT weighted format, array_rand returns key/array.
+		// We want the value.
+		$key = array_rand( $array );
+		$val = $array[$key];
+
+		// If value is array (e.g. malformed weight), take first element or stringify?
+		// Better to just return string.
+		if ( is_array( $val ) ) {
+			return $val[0] ?? '';
+		}
+
+		return $val;
 	}
 
 	public static function pick_weighted( $array ) {

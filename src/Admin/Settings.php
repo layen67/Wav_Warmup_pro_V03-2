@@ -11,7 +11,7 @@ class Settings {
 	private string $option_name = 'pw_settings';
 
 	// Default Settings Configuration
-	private array $defaults = [
+	public static array $defaults = [
 		// General
 		'sending_enabled' => true,
 		'global_tag' => 'warmup',
@@ -139,7 +139,7 @@ class Settings {
 	}
 
 	private function migrate_old_options(): void {
-		$new = $this->defaults;
+		$new = self::$defaults;
 
 		$map = [
 			'pw_global_tag' => 'global_tag',
@@ -169,10 +169,10 @@ class Settings {
 	}
 
 	public function sanitize_settings( $input ): array {
-		$output = get_option( $this->option_name, $this->defaults );
-		if ( ! is_array( $output ) ) $output = $this->defaults;
+		$output = get_option( $this->option_name, self::$defaults );
+		if ( ! is_array( $output ) ) $output = self::$defaults;
 
-		foreach ( $this->defaults as $key => $default ) {
+		foreach ( self::$defaults as $key => $default ) {
 			if ( isset( $input[$key] ) ) {
 				$type = gettype( $default );
 				if ( $type === 'integer' ) {
@@ -426,11 +426,11 @@ class Settings {
 	}
 
 	public function render_field( $args ): void {
-		$options = get_option( $this->option_name, $this->defaults );
-		if(!is_array($options)) $options = $this->defaults;
+		$options = get_option( $this->option_name, self::$defaults );
+		if(!is_array($options)) $options = self::$defaults;
 
 		$id = $args['id'];
-		$value = isset( $options[$id] ) ? $options[$id] : ( $this->defaults[$id] ?? '' );
+		$value = isset( $options[$id] ) ? $options[$id] : ( self::$defaults[$id] ?? '' );
 		$name = $this->option_name . '[' . $id . ']';
 
 		switch ( $args['type'] ) {
@@ -496,19 +496,7 @@ class Settings {
 			return $options[$key];
 		}
 
-		$defaults = [
-			'queue_batch_size' => 20,
-			'db_query_limit' => 500,
-			'default_sort_column' => 'sent_count',
-			'default_sort_order' => 'DESC',
-			'api_timeout' => 15,
-			'warmup_start' => 10,
-			'warmup_increase_percent' => 20,
-			'warmup_advance_threshold' => 80,
-			'warmup_retreat_threshold' => 3,
-			'warmup_min_volume' => 10,
-		];
-
-		return $default_override ?? ($defaults[$key] ?? null);
+		// Access static defaults
+		return $default_override ?? (self::$defaults[$key] ?? null);
 	}
 }

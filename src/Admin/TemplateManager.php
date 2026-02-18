@@ -18,12 +18,63 @@ class TemplateManager {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_templates';
 		
-		$templates = $wpdb->get_results( "SELECT id, name, folder_id, status, is_favorite, tags, last_used_at, usage_count, timezone, default_label FROM $table ORDER BY name ASC", ARRAY_A );
+		// Re-query with data column to satisfy UI needs
+		$templates = $wpdb->get_results( "SELECT id, name, data, folder_id, status, is_favorite, tags, last_used_at, usage_count, timezone, default_label FROM $table ORDER BY name ASC", ARRAY_A );
 
-		// Add "system" template null if not present in DB (virtual)
-		// But in v3, we usually want real templates.
-		// If we want to show 'null' in the manager, we can append it.
-		// Let's stick to DB templates for now.
+		foreach ( $templates as &$tpl ) {
+			// Decode data to count variants
+			$data = json_decode( $tpl['data'], true ) ?: [];
+			$tpl['variants'] = [
+				'subject' => count( $data['subject'] ?? [] ),
+				'text'    => count( $data['text'] ?? [] ),
+				'html'    => count( $data['html'] ?? [] ),
+			];
+
+			// Tags handling
+			if ( ! empty( $tpl['tags'] ) && is_string( $tpl['tags'] ) ) {
+				// Check if JSON or CSV
+				if ( $tpl['tags'][0] === '[' ) {
+					$decoded = json_decode( $tpl['tags'], true );
+					if ( is_array( $decoded ) ) {
+						$tpl['tags'] = $decoded;
+					} else {
+						// Fallback if decode fails but looked like JSON
+						$tpl['tags'] = [];
+					}
+				} else {
+					// CSV
+					$tpl['tags'] = explode( ',', $tpl['tags'] );
+				}
+
+				// Ensure simple array of strings for UI if needed,
+				// but let's check what UI expects. JS usually expects array of objects or strings.
+				// Based on legacy code, it might expect array of strings.
+				// If the review patch suggests wrapping in objects ['name' => $t], let's check that.
+				// The review patch had: $tpl['tags'] = array_map(function($t){ return ['name' => $t]; }, explode(',', $tpl['tags']));
+				// Let's adopt that if it matches the UI expectation.
+				// The mockup/JS usually wants clear structure.
+				// Let's assume simple strings are fine unless specific JS requires objects.
+				// Actually, review patch code:
+				// $tpl['tags'] = array_map(function($t){ return ['name' => $t]; }, ...);
+				// This implies the UI (Tagify or similar) expects objects.
+				// Let's stick to the review patch logic for safety.
+
+				if ( is_array( $tpl['tags'] ) ) {
+					// Normalize to objects if they are strings
+					$normalized = [];
+					foreach ( $tpl['tags'] as $t ) {
+						if ( is_string( $t ) ) {
+							$normalized[] = [ 'name' => trim( $t ) ];
+						} elseif ( is_array( $t ) && isset( $t['name'] ) ) {
+							$normalized[] = $t;
+						}
+					}
+					$tpl['tags'] = $normalized;
+				}
+			} else {
+				$tpl['tags'] = [];
+			}
+		}
 
 		return $templates ?: [];
 	}
@@ -55,7 +106,7 @@ class TemplateManager {
 		];
 
 		// Check ID
-		$id = $meta['id'];
+		$id = isset( $meta['id'] ) ? (int) $meta['id'] : 0;
 
 		if ( $id > 0 ) {
 			// Update
@@ -114,7 +165,7 @@ class TemplateManager {
 			'mailto_from_name' => $template['mailto_from_name'] ?? [],
 			'default_label'    => $template['default_label'] ?? '',
 		];
-		
+
 		$meta = [
 			'id'        => 0,
 			'folder_id' => $template['folder_id'] ?? self::ensure_uncategorized_folder(),
@@ -122,7 +173,7 @@ class TemplateManager {
 			'tags'      => $template['tags'] ?? [],
 			'timezone'  => $template['timezone'] ?? ''
 		];
-		
+
 		return self::save_template( $new_name, $data, $meta );
 	}
 

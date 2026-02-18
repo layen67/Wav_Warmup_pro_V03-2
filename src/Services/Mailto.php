@@ -56,24 +56,28 @@ class Mailto {
 		}
 
 		// 2. Prepare Data
-		// Prefixes
-		if ( ! empty( $atts['prefix'] ) ) {
-			$prefixes = array_map( 'trim', explode( ',', $atts['prefix'] ) );
-		} elseif ( $template_data && ! empty( $template_data['from_name'] ) ) {
-			// from_name usually contains display names, not prefixes.
-			// But for consistency with legacy shortcode which used prefix to build email address:
-			// If we are generating mailto link, we need a TARGET address.
-			// The plugin sends FROM server TO contact.
-			// BUT [warmup_mailto] generates a link for CONTACT TO SEND TO SERVER.
-			// So target address must be on server.
-			$prefixes = [ 'contact', 'info', 'support', 'hello' ];
-		} else {
-			$prefixes = [ 'contact', 'info', 'support', 'hello' ];
-		}
-
 		// Target Emails (Where user sends email to)
+		$pool = [];
 		if ( ! empty( $atts['emails'] ) ) {
 			$pool = array_map( 'trim', explode( ',', $atts['emails'] ) );
+		} elseif ( ! empty( $atts['prefix'] ) ) {
+			// Legacy behavior: use prefix on all active servers
+			$prefixes = array_map( 'trim', explode( ',', $atts['prefix'] ) );
+			$servers = \PostalWarmup\Models\Database::get_servers( true );
+			foreach ( $servers as $server ) {
+				foreach ( $prefixes as $p ) {
+					$pool[] = $p . '@' . $server['domain'];
+				}
+			}
+		} elseif ( $template_data && ! empty( $template_data['mailto_email_prefix'] ) ) {
+			// Template config
+			$prefixes = explode( ',', $template_data['mailto_email_prefix'] );
+			$servers = \PostalWarmup\Models\Database::get_servers( true );
+			foreach ( $servers as $server ) {
+				foreach ( $prefixes as $p ) {
+					$pool[] = trim( $p ) . '@' . $server['domain'];
+				}
+			}
 		} else {
 			$pool = $this->get_inbound_addresses();
 		}

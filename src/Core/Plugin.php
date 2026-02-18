@@ -125,12 +125,14 @@ class Plugin {
 		\PostalWarmup\Services\WebhookDispatcher::init();
 
 		// Server Lifecycle Hook (Auto-create Route)
-		$this->loader->add_action( 'pw_new_server_created', function($server_id) {
-			$server = Database::get_server( $server_id );
-			if ( $server ) {
-				PostalRouteManager::ensure_route_configured( $server );
-			}
-		}, 10, 1 );
+		$this->loader->add_action( 'pw_new_server_created', $this, 'on_new_server_created', 10, 1 );
+	}
+
+	public function on_new_server_created( int $server_id ): void {
+		$server = Database::get_server( $server_id );
+		if ( $server ) {
+			PostalRouteManager::ensure_route_configured( $server );
+		}
 	}
 
 	/**

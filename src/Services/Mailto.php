@@ -20,7 +20,12 @@ class Mailto {
 		add_shortcode( 'warmup_auto_link', array( $this, 'render_auto_link' ) );
 	}
 
-	public function render_shortcode( $atts ): string {
+	public function render_shortcode( $atts, ?string $content = null ): string {
+		// Normalize $atts if null (no attributes)
+		if ( ! is_array( $atts ) ) {
+			$atts = [];
+		}
+
 		$atts = shortcode_atts( array(
 			'template' => '', // Legacy slug or ID
 			'name'     => '', // Alias for template
@@ -48,44 +53,33 @@ class Mailto {
 			$template_data = TemplateLoader::load( $template_name );
 		}
 
-		// 2. Prepare Data (Prioritize attributes, fallback to template, then global)
+		// 2. Prepare Data
 		// Prefixes
 		if ( ! empty( $atts['prefix'] ) ) {
 			$prefixes = array_map( 'trim', explode( ',', $atts['prefix'] ) );
 		} elseif ( $template_data && ! empty( $template_data['from_name'] ) ) {
-			// Actually prefix is usually 'contact', 'support'.
-			// If template defines 'from_name', it's display name.
-			// Let's assume prefix logic is handled via TemplateEngine if using Sender,
-			// but here we are generating a mailto link.
-			// Users usually put prefixes in shortcode or use default.
+			// from_name usually contains display names, not prefixes.
+			// But for consistency with legacy shortcode which used prefix to build email address:
+			// If we are generating mailto link, we need a TARGET address.
+			// The plugin sends FROM server TO contact.
+			// BUT [warmup_mailto] generates a link for CONTACT TO SEND TO SERVER.
+			// So target address must be on server.
 			$prefixes = [ 'contact', 'info', 'support', 'hello' ];
 		} else {
 			$prefixes = [ 'contact', 'info', 'support', 'hello' ];
 		}
 
-		// Emails (Destinations)
-		// For a mailto link, 'to' is usually the user clicking, but mailto: opens draft TO someone.
-		// Wait, warmup mailto links usually point to the WARMUP INBOXES (so users send TO the warmup network).
-		// So 'emails' attribute or template 'to' list?
-		// Usually a pool of warmup addresses provided by the platform.
-		// Let's assume we have a pool setting or shortcode attribute.
-		// If explicit 'emails' attribute is set:
+		// Target Emails (Where user sends email to)
 		if ( ! empty( $atts['emails'] ) ) {
 			$pool = array_map( 'trim', explode( ',', $atts['emails'] ) );
 		} else {
-			// Fallback: This plugin sends FROM server TO external list.
-			// BUT [warmup_mailto] generates a link for VISITORS to send TO server?
-			// OR is it for internal use?
-			// Context: "Postal Warmup". Usually outbound.
-			// If this shortcode generates a mailto link, it means we want visitors to email US (inbound warmup).
-			// So we need a target email address on our domain.
-			// We can generate one based on active servers.
 			$pool = $this->get_inbound_addresses();
 		}
 
 		if ( empty( $pool ) ) return '<!-- No warmup addresses available -->';
 
-		$target_email = $pool[ array_rand( $pool ) ]; // Simple random for target is fine
+		// Select random target
+		$target_email = (string) $pool[ array_rand( $pool ) ];
 
 		// Subject
 		$subject = '';
@@ -129,14 +123,26 @@ class Mailto {
 			$href .= '?' . build_query( $params );
 		}
 
-		// Label
-		$label = $atts['label'];
+		// Label Resolution Priority
+		// 1. Inner content
+		$label = '';
+		if ( ! empty( $content ) ) {
+			$label = strip_tags( $content );
+		}
+
+		// 2. Attribute label=
+		if ( empty( $label ) && ! empty( $atts['label'] ) ) {
+			$label = $atts['label'];
+		}
+
+		// 3. Template default_label
+		if ( empty( $label ) && $template_data && ! empty( $template_data['default_label'] ) ) {
+			$label = $template_data['default_label'];
+		}
+
+		// 4. Fallback
 		if ( empty( $label ) ) {
-			if ( $template_data && ! empty( $template_data['default_label'] ) ) {
-				$label = $template_data['default_label'];
-			} else {
-				$label = __( 'Envoyer un email', 'postal-warmup' );
-			}
+			$label = __( 'Envoyer un email', 'postal-warmup' );
 		}
 
 		// CSS Classes
@@ -146,13 +152,15 @@ class Mailto {
 		}
 
 		// Tracking (Optional)
-		$onclick = "fetch('" . admin_url( 'admin-ajax.php?action=pw_track_click' ) . "', {method:'POST', body: new URLSearchParams({nonce:'" . wp_create_nonce( 'pw_track' ) . "', template:'" . esc_js( $template_name ) . "'})});";
+		// We use an admin-ajax endpoint for tracking if enabled?
+		// Usually shortcode clicks are tracked via JS.
+		// For now, simple link.
+		$onclick = ""; // JS handler can attach to class
 
 		return sprintf(
-			'<a href="%s" class="%s" onclick="%s" rel="nofollow">%s</a>',
-			esc_url( $href ), // mailto is safe protocol
+			'<a href="%s" class="%s" rel="nofollow">%s</a>',
+			esc_url( $href ),
 			$classes,
-			$onclick,
 			esc_html( $label )
 		);
 	}
@@ -162,12 +170,10 @@ class Mailto {
 	}
 
 	private function get_inbound_addresses(): array {
-		// Retrieve active server domains and construct catch-all addresses
-		// Or use specific configured list
-		// Here we fetch active servers
 		$servers = \PostalWarmup\Models\Database::get_servers( true );
 		$addresses = [];
 		foreach ( $servers as $server ) {
+			// Assume catch-all or standard prefixes on server domain
 			$addresses[] = 'contact@' . $server['domain'];
 			$addresses[] = 'support@' . $server['domain'];
 		}

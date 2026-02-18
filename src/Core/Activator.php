@@ -59,14 +59,13 @@ class Activator {
 		
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-		// Use a simple lock mechanism to prevent race conditions on multisite
 		$lock_key = 'pw_db_update_lock';
 		if ( get_transient( $lock_key ) ) {
 			return;
 		}
 		set_transient( $lock_key, true, 30 );
 
-		// 1. Servers
+		// 1. Servers (Added lifecycle columns)
 		$table_servers = $wpdb->prefix . 'postal_servers';
 		$sql_servers = "CREATE TABLE $table_servers (
 			id int NOT NULL AUTO_INCREMENT,
@@ -84,6 +83,12 @@ class Activator {
 			last_used datetime DEFAULT NULL,
 			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			updated_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			postal_route_id varchar(100) NULL,
+			postal_endpoint_id varchar(100) NULL,
+			incoming_configured tinyint(1) DEFAULT 0,
+			incoming_last_check datetime NULL,
+			migration_target_server_id int NULL,
+			deleted_at datetime NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY domain (domain),
 			KEY idx_active (active),
@@ -368,6 +373,89 @@ class Activator {
 		) $charset_collate;";
 		dbDelta( $sql_strategies );
 
+		// 17. Conversations (NEW)
+		$table_conversations = $wpdb->prefix . 'postal_conversations';
+		$sql_conversations = "CREATE TABLE $table_conversations (
+			id int NOT NULL AUTO_INCREMENT,
+			original_message_id varchar(255) NULL,
+			thread_id varchar(255) NULL,
+			contact_email varchar(255) NOT NULL,
+			server_id int NOT NULL,
+			from_prefix varchar(100) NOT NULL DEFAULT 'contact',
+			scenario_id int NULL,
+			current_stage int DEFAULT 0,
+			loop_cycle int DEFAULT 0,
+			last_contact_at datetime NULL,
+			next_scheduled_at datetime NULL,
+			templates_sent json NULL,
+			waiting_for_reply tinyint(1) DEFAULT 1,
+			pending_reply tinyint(1) DEFAULT 0,
+			reactivation_scheduled tinyint(1) DEFAULT 0,
+			migration_status varchar(20) DEFAULT 'none',
+			migrated_to_server_id int NULL,
+			migrated_at datetime NULL,
+			status varchar(20) DEFAULT 'active',
+			reply_subject text NULL,
+			reply_body longtext NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			UNIQUE KEY unique_active_contact (contact_email, server_id, status),
+			KEY idx_contact (contact_email),
+			KEY idx_server (server_id),
+			KEY idx_status (status),
+			KEY idx_scenario (scenario_id)
+		) $charset_collate;";
+		dbDelta( $sql_conversations );
+
+		// 18. Scenarios (NEW)
+		$table_scenarios = $wpdb->prefix . 'postal_scenarios';
+		$sql_scenarios = "CREATE TABLE $table_scenarios (
+			id int NOT NULL AUTO_INCREMENT,
+			name varchar(255) NOT NULL,
+			description text NULL,
+			trigger_event varchar(100) NOT NULL DEFAULT 'reply',
+			conditions json NULL,
+			steps json NOT NULL,
+			reply_template_name varchar(255) NULL,
+			migration_template varchar(255) NULL,
+			loop_back_to_stage int DEFAULT 0,
+			loop_max_cycles int DEFAULT 0,
+			require_reply_to_advance tinyint(1) DEFAULT 1,
+			reactivation_delay_days int DEFAULT 7,
+			reactivation_template varchar(255) NULL,
+			allowed_server_ids json NULL,
+			priority int DEFAULT 10,
+			active tinyint(1) DEFAULT 1,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY idx_trigger (trigger_event),
+			KEY idx_active (active)
+		) $charset_collate;";
+		dbDelta( $sql_scenarios );
+
+		// 19. Reply Rules (NEW)
+		$table_rules = $wpdb->prefix . 'postal_reply_template_rules';
+		$sql_rules = "CREATE TABLE $table_rules (
+			id int NOT NULL AUTO_INCREMENT,
+			name varchar(255) NOT NULL,
+			match_prefix varchar(100) NULL,
+			match_server_id int NULL,
+			match_subject_contains varchar(255) NULL,
+			match_body_contains varchar(255) NULL,
+			response_template_name varchar(255) NOT NULL,
+			scenario_id int NULL,
+			priority int DEFAULT 10,
+			active tinyint(1) DEFAULT 1,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY idx_prefix (match_prefix),
+			KEY idx_server (match_server_id),
+			KEY idx_active (active)
+		) $charset_collate;";
+		dbDelta( $sql_rules );
+
 		// Add capability
 		$role = get_role( 'administrator' );
 		if ( $role ) {
@@ -465,6 +553,10 @@ class Activator {
 		}
 		if ( ! wp_next_scheduled( 'pw_advisor_check' ) ) {
 			wp_schedule_event( time(), 'hourly', 'pw_advisor_check' );
+		}
+		// New Scenarios cron
+		if ( ! wp_next_scheduled( 'pw_scenario_daily_check' ) ) {
+			wp_schedule_event( time(), 'daily', 'pw_scenario_daily_check' );
 		}
 	}
 }

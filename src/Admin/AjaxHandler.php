@@ -105,11 +105,14 @@ class AjaxHandler {
 			'mailto_from_name' => array_map( 'sanitize_text_field', $variants['mailto_from_name'] ?? [] ),
 			'default_label' => sanitize_text_field( $_POST['default_label'] ?? '' ),
 		];
+		$tags_input = isset( $_POST['tags'] ) ? $_POST['tags'] : '';
+		$tags_array = is_array( $tags_input ) ? $tags_input : explode( ',', (string) $tags_input );
+
 		$meta = [
 			'id'        => (int) ( $_POST['id'] ?? 0 ),
 			'folder_id' => (int) ( $_POST['folder_id'] ?? 0 ),
 			'status'    => sanitize_text_field( $_POST['status'] ?? 'active' ),
-			'tags'      => array_map( 'sanitize_text_field', explode( ',', $_POST['tags'] ?? '' ) ),
+			'tags'      => array_map( 'sanitize_text_field', $tags_array ),
 			'timezone'  => sanitize_text_field( $_POST['timezone'] ?? '' )
 		];
 		

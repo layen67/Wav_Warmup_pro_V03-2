@@ -60,7 +60,7 @@ class Admin {
 
 		// Templates Manager JS
 		if ( isset( $_GET['page'] ) && $_GET['page'] === 'postal-warmup-templates' ) {
-			wp_enqueue_script( 'postal-warmup-templates', PW_PLUGIN_URL . 'admin/assets/js/templates-manager-v3.1.js', [ 'jquery', 'jquery-ui-draggable', 'jquery-ui-droppable' ], $this->version, true );
+			wp_enqueue_script( 'postal-warmup-templates', PW_PLUGIN_URL . 'admin/assets/js/templates-manager-v3.1.js', [ 'jquery', 'jquery-ui-draggable', 'jquery-ui-droppable', 'underscore', 'wp-util' ], $this->version, true );
 		}
 
 		wp_localize_script( 'postal-warmup-admin', 'pwAdmin', [

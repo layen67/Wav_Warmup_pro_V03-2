@@ -816,11 +816,13 @@
                 this.loadTemplate(templateName);
             } else {
                 $('#pw-editor-title').text('Nouveau Template');
-                // Add one default variant for each
+                this.resetForm();
+
+                // Add default variant rows for better UX
                 this.addVariant('subject');
-                this.addVariant('from_name');
                 this.addVariant('text');
                 this.addVariant('html');
+                this.addVariant('from_name');
             }
             
             $modal.show();

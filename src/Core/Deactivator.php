@@ -1,10 +1,9 @@
 <?php
+// src/Core/Deactivator.php
 
 declare(strict_types=1);
 
 namespace PostalWarmup\Core;
-
-
 
 /**
  * Fired during plugin deactivation.
@@ -25,7 +24,8 @@ class Deactivator {
 			'pw_cleanup_old_stats',
 			'pw_daily_stats_aggregation',
 			'pw_cleanup_queue',
-			'pw_advisor_check'
+			'pw_advisor_check',
+			'pw_scenario_daily_check'
 		];
 
 		foreach ( $crons as $cron ) {

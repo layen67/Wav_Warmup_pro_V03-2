@@ -13,8 +13,8 @@ use PostalWarmup\Admin\TemplateManager;
 use PostalWarmup\Admin\Settings;
 use PostalWarmup\Admin\ISPManager;
 use PostalWarmup\Admin\StrategyManager;
-
-
+use PostalWarmup\Admin\ScenarioManager;
+use PostalWarmup\Admin\ReplyRuleManager;
 
 /**
  * Gestionnaire des requêtes AJAX
@@ -612,5 +612,79 @@ class AjaxHandler {
 		$wpdb->query( "TRUNCATE TABLE {$wpdb->prefix}postal_stats_history" );
 
 		wp_send_json_success( [ 'message' => 'All data purged.' ] );
+	}
+
+	// --- Scenarios ---
+
+	public function ajax_get_all_scenarios(): void {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+		wp_send_json_success( [ 'scenarios' => ScenarioManager::get_all() ] );
+	}
+
+	public function ajax_get_scenario(): void {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+		$scenario = ScenarioManager::get( (int) $_POST['id'] );
+		if ( $scenario ) wp_send_json_success( $scenario );
+		else wp_send_json_error( [ 'message' => 'Scenario not found' ] );
+	}
+
+	public function ajax_save_scenario(): void {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+
+		$id = ScenarioManager::save( $_POST );
+
+		if ( $id ) wp_send_json_success( [ 'id' => $id, 'message' => 'Scenario saved.' ] );
+		else wp_send_json_error( [ 'message' => 'Save failed.' ] );
+	}
+
+	public function ajax_delete_scenario(): void {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+
+		if ( ScenarioManager::delete( (int) $_POST['id'] ) ) {
+			wp_send_json_success( [ 'message' => 'Scenario deleted.' ] );
+		} else {
+			wp_send_json_error( [ 'message' => 'Delete failed.' ] );
+		}
+	}
+
+	// --- Reply Rules ---
+
+	public function ajax_get_all_reply_rules(): void {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+		wp_send_json_success( [ 'rules' => ReplyRuleManager::get_all() ] );
+	}
+
+	public function ajax_get_reply_rule(): void {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+		$rule = ReplyRuleManager::get( (int) $_POST['id'] );
+		if ( $rule ) wp_send_json_success( $rule );
+		else wp_send_json_error( [ 'message' => 'Rule not found' ] );
+	}
+
+	public function ajax_save_reply_rule(): void {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+
+		$id = ReplyRuleManager::save( $_POST );
+
+		if ( $id ) wp_send_json_success( [ 'id' => $id, 'message' => 'Rule saved.' ] );
+		else wp_send_json_error( [ 'message' => 'Save failed.' ] );
+	}
+
+	public function ajax_delete_reply_rule(): void {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		$this->check_permission();
+
+		if ( ReplyRuleManager::delete( (int) $_POST['id'] ) ) {
+			wp_send_json_success( [ 'message' => 'Rule deleted.' ] );
+		} else {
+			wp_send_json_error( [ 'message' => 'Delete failed.' ] );
+		}
 	}
 }

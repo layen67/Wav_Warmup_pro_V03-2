@@ -1,65 +1,128 @@
 <?php
+// src/Models/ReplyTemplateRule.php
 
 declare(strict_types=1);
 
 namespace PostalWarmup\Models;
 
-
-
+/**
+ * Handles database operations for Reply Rules.
+ */
 class ReplyTemplateRule {
 
-	public static function get_all(): array {
+	private static string $table = 'postal_reply_template_rules';
+
+	public static function get_table_name(): string {
 		global $wpdb;
-		$table = $wpdb->prefix . 'postal_reply_template_rules';
-		return $wpdb->get_results( "SELECT * FROM $table ORDER BY priority DESC", ARRAY_A ) ?: [];
+		return $wpdb->prefix . self::$table;
 	}
 
-	public static function save( array $data ): int|false {
+	public static function get_all( bool $active_only = false ): array {
 		global $wpdb;
-		$table = $wpdb->prefix . 'postal_reply_template_rules';
+		$table = self::get_table_name();
+		$sql = "SELECT * FROM $table";
 
-		$defaults = [ 'priority' => 10, 'active' => 1 ];
-		$data = array_merge( $defaults, $data );
-
-		if ( ! empty( $data['id'] ) ) {
-			$wpdb->update( $table, $data, [ 'id' => $data['id'] ] );
-			return (int) $data['id'];
-		} else {
-			$data['created_at'] = current_time( 'mysql' );
-			$wpdb->insert( $table, $data );
-			return $wpdb->insert_id ? (int) $wpdb->insert_id : false;
+		if ( $active_only ) {
+			$sql .= " WHERE active = 1";
 		}
+
+		$sql .= " ORDER BY priority ASC, created_at DESC";
+
+		return $wpdb->get_results( $sql, ARRAY_A );
+	}
+
+	public static function get( int $id ): ?array {
+		global $wpdb;
+		$table = self::get_table_name();
+		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $id ), ARRAY_A );
+	}
+
+	public static function create( array $data ): int {
+		global $wpdb;
+		$table = self::get_table_name();
+
+		$wpdb->insert( $table, [
+			'name' => sanitize_text_field( $data['name'] ),
+			'match_prefix' => !empty($data['match_prefix']) ? sanitize_text_field( $data['match_prefix'] ) : null,
+			'match_server_id' => !empty($data['match_server_id']) ? (int) $data['match_server_id'] : null,
+			'match_subject_contains' => !empty($data['match_subject_contains']) ? sanitize_text_field( $data['match_subject_contains'] ) : null,
+			'match_body_contains' => !empty($data['match_body_contains']) ? sanitize_text_field( $data['match_body_contains'] ) : null,
+			'response_template_name' => sanitize_text_field( $data['response_template_name'] ),
+			'scenario_id' => !empty($data['scenario_id']) ? (int) $data['scenario_id'] : null,
+			'priority' => (int) ( $data['priority'] ?? 10 ),
+			'active' => (int) ( $data['active'] ?? 1 ),
+			'created_at' => current_time( 'mysql' )
+		] );
+
+		return $wpdb->insert_id;
+	}
+
+	public static function update( int $id, array $data ): bool {
+		global $wpdb;
+		$table = self::get_table_name();
+
+		$update_data = [];
+		$format = [];
+
+		$fields = [
+			'name' => '%s',
+			'match_prefix' => '%s',
+			'match_server_id' => '%d',
+			'match_subject_contains' => '%s',
+			'match_body_contains' => '%s',
+			'response_template_name' => '%s',
+			'scenario_id' => '%d',
+			'priority' => '%d',
+			'active' => '%d',
+		];
+
+		foreach ( $fields as $field => $fmt ) {
+			if ( array_key_exists( $field, $data ) ) { // Use array_key_exists to allow null updates
+				$update_data[ $field ] = $data[ $field ];
+				$format[] = $fmt;
+			}
+		}
+
+		if ( empty( $update_data ) ) return false;
+
+		$updated = $wpdb->update( $table, $update_data, [ 'id' => $id ], $format, [ '%d' ] );
+		return $updated !== false;
 	}
 
 	public static function delete( int $id ): bool {
 		global $wpdb;
-		return (bool) $wpdb->delete( $wpdb->prefix . 'postal_reply_template_rules', [ 'id' => $id ] );
+		$table = self::get_table_name();
+		return (bool) $wpdb->delete( $table, [ 'id' => $id ], [ '%d' ] );
 	}
 
-	public static function find_matching_rule( array $context ): ?array {
-		global $wpdb;
-		$table = $wpdb->prefix . 'postal_reply_template_rules';
-
-		$sql = "SELECT * FROM $table WHERE active = 1 ORDER BY priority DESC";
-		$rules = $wpdb->get_results( $sql, ARRAY_A );
+	/**
+	 * Find the best matching rule for an incoming message.
+	 */
+	public static function match_rule( int $server_id, string $subject, string $body, string $prefix ): ?array {
+		$rules = self::get_all( true ); // Active only, sorted by priority
 
 		foreach ( $rules as $rule ) {
-			// Prefix Match
-			if ( ! empty( $rule['match_prefix'] ) && $rule['match_prefix'] !== $context['prefix'] ) continue;
-
-			// Server Match
-			if ( ! empty( $rule['match_server_id'] ) && (int)$rule['match_server_id'] !== $context['server_id'] ) continue;
-
-			// Keyword Match (Subject)
-			if ( ! empty( $rule['match_subject_contains'] ) ) {
-				if ( stripos( $context['subject'], $rule['match_subject_contains'] ) === false ) continue;
+			// Check Server ID
+			if ( ! empty( $rule['match_server_id'] ) && (int)$rule['match_server_id'] !== $server_id ) {
+				continue;
 			}
 
-			// Keyword Match (Body)
-			if ( ! empty( $rule['match_body_contains'] ) ) {
-				if ( stripos( $context['body'], $rule['match_body_contains'] ) === false ) continue;
+			// Check Prefix
+			if ( ! empty( $rule['match_prefix'] ) && stripos( $prefix, $rule['match_prefix'] ) === false ) {
+				continue;
 			}
 
+			// Check Subject
+			if ( ! empty( $rule['match_subject_contains'] ) && stripos( $subject, $rule['match_subject_contains'] ) === false ) {
+				continue;
+			}
+
+			// Check Body
+			if ( ! empty( $rule['match_body_contains'] ) && stripos( $body, $rule['match_body_contains'] ) === false ) {
+				continue;
+			}
+
+			// Match found!
 			return $rule;
 		}
 

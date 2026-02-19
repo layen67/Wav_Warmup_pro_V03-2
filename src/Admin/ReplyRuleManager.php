@@ -1,4 +1,5 @@
 <?php
+// src/Admin/ReplyRuleManager.php
 
 declare(strict_types=1);
 
@@ -6,33 +7,42 @@ namespace PostalWarmup\Admin;
 
 use PostalWarmup\Models\ReplyTemplateRule;
 
-
-
+/**
+ * Admin Logic for Reply Rules.
+ */
 class ReplyRuleManager {
 
-	public static function ajax_save_reply_rule(): void {
-		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
-
-		$data = [
-			'id' => (int) ($_POST['id'] ?? 0),
-			'name' => sanitize_text_field( $_POST['name'] ),
-			'match_prefix' => sanitize_text_field( $_POST['match_prefix'] ),
-			'response_template_name' => sanitize_text_field( $_POST['response_template_name'] ),
-			'active' => isset( $_POST['active'] ) ? 1 : 0
-		];
-
-		$id = ReplyTemplateRule::save( $data );
-
-		if ( $id ) wp_send_json_success( [ 'id' => $id ] );
-		else wp_send_json_error( [ 'message' => 'Save failed' ] );
+	public static function get_all(): array {
+		return ReplyTemplateRule::get_all( false );
 	}
 
-	public static function ajax_delete_reply_rule(): void {
-		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+	public static function get( int $id ): ?array {
+		return ReplyTemplateRule::get( $id );
+	}
 
-		ReplyTemplateRule::delete( (int) $_POST['id'] );
-		wp_send_json_success();
+	public static function save( array $post_data ): int {
+		$data = [
+			'name' => sanitize_text_field( $post_data['name'] ),
+			'match_prefix' => sanitize_text_field( $post_data['match_prefix'] ?? '' ),
+			'match_server_id' => (int) ( $post_data['match_server_id'] ?? 0 ),
+			'match_subject_contains' => sanitize_text_field( $post_data['match_subject_contains'] ?? '' ),
+			'match_body_contains' => sanitize_text_field( $post_data['match_body_contains'] ?? '' ),
+			'response_template_name' => sanitize_text_field( $post_data['response_template_name'] ),
+			'scenario_id' => (int) ( $post_data['scenario_id'] ?? 0 ),
+			'priority' => (int) ( $post_data['priority'] ?? 10 ),
+			'active' => isset( $post_data['active'] ) ? 1 : 0,
+		];
+
+		if ( ! empty( $post_data['id'] ) ) {
+			$id = (int) $post_data['id'];
+			ReplyTemplateRule::update( $id, $data );
+			return $id;
+		} else {
+			return ReplyTemplateRule::create( $data );
+		}
+	}
+
+	public static function delete( int $id ): bool {
+		return ReplyTemplateRule::delete( $id );
 	}
 }

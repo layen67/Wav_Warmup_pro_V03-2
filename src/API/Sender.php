@@ -1,4 +1,5 @@
 <?php
+// src/API/Sender.php
 
 declare(strict_types=1);
 
@@ -8,8 +9,6 @@ use PostalWarmup\Models\Database;
 use PostalWarmup\Services\Logger;
 use PostalWarmup\Core\TemplateEngine;
 use PostalWarmup\Admin\Settings;
-
-
 
 /**
  * Classe d'envoi des emails via Postal
@@ -39,22 +38,8 @@ class Sender {
 				'prefix'      => $prefix,
 				'server_id'   => (int)$server['id'],
 				'retry_count' => 0,
-				'handle_retry'=> false // Sender does not handle retry in async mode, QueueManager does? No, async here means fire and forget from e.g. manual test.
-				// Wait, if manual test triggers this, we want result?
-				// If scheduled, it runs later.
-				// QueueManager calls process_queue directly (sync).
-				// This method 'send' is used for immediate/test sends.
 			);
 			
-			// If we schedule it, we can't return success immediately unless we just say 'queued'.
-			// For tests, we might want sync.
-			// Let's assume 'send' is for test/manual mainly. QueueManager uses 'process_queue'.
-
-			// Wait, if QueueManager uses 'process_queue', then 'send' is just a wrapper?
-			// QueueManager calls `new Sender()->process_queue(...)`.
-
-			// So `send` is a static helper for other parts of the app.
-
 			as_schedule_single_action( time(), 'pw_send_email_async', $args, 'postal-warmup' );
 			
 			Logger::info( "Email mis en file d'attente", [
@@ -70,7 +55,7 @@ class Sender {
 		return $sender->process_queue( $to, $domain, $prefix, (int)$server['id'], 0 );
 	}
 
-	public function process_queue( string $to, string $domain, string $prefix, int $server_id, int $retry_count = 0, bool $handle_retry = true ): array {
+	public function process_queue( string $to, string $domain, string $prefix, int $server_id, int $retry_count = 0 ): array {
 		
 		$server = Database::get_server( $server_id );
 		if ( ! $server ) {
@@ -78,7 +63,7 @@ class Sender {
 			return [ 'error' => 'Serveur introuvable' ];
 		}
 
-		$prepared = TemplateEngine::prepare_template( $prefix, $domain, $prefix, $to );
+		$prepared = TemplateEngine::prepare_template( 'default', $domain, $prefix, $to );
 		$template_name = $prepared['name'];
 
 		$from_email = $prefix . '@' . $domain;
@@ -155,13 +140,14 @@ class Sender {
 
 			Database::increment_sent( $domain, true, $response_time );
 			Database::record_stat( (int)$server['id'], true, $response_time );
-			return $result;
+
+			return [ 'success' => true, 'response' => $result['response'], 'response_time' => $response_time ];
 		}
 		
 		Database::increment_sent( $domain, false, $response_time );
 		Database::record_stat( (int)$server['id'], false, $response_time );
 		
-		return $result;
+		return [ 'success' => false, 'error' => $result['error'], 'response_time' => $response_time ];
 	}
 
 	private static function send_request( array $server, array $payload, int $attempt, ?string $template_name = null ): array {

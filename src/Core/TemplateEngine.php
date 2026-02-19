@@ -1,9 +1,11 @@
 <?php
+// src/Core/TemplateEngine.php
+
+declare(strict_types=1);
 
 namespace PostalWarmup\Core;
 
 use PostalWarmup\Services\TemplateLoader;
-use PostalWarmup\Models\Database;
 
 /**
  * Centralized Template Engine
@@ -18,9 +20,9 @@ class TemplateEngine {
 	 * @param string $domain
 	 * @param string $prefix
 	 * @param string $to
-	 * @return array|WP_Error
+	 * @return array
 	 */
-	public static function prepare_template( $template_name, $domain, $prefix, $to ) {
+	public static function prepare_template( string $template_name, string $domain, string $prefix, string $to ): array {
 		// 1. Load Template
 		$template = TemplateLoader::load( $template_name, $domain );
 		
@@ -34,11 +36,11 @@ class TemplateEngine {
 			$template['name'] = 'system-fallback'; 
 		}
 
-		// 3. Pick Variants (Random Selection)
-		$subject   = self::pick_random( $template['subject'] );
-		$text      = self::pick_random( $template['text'] );
-		$html      = self::pick_random( $template['html'] );
-		$from_name = self::pick_random( $template['from_name'] );
+		// 3. Pick Variants (Random Selection) - Delegated to TemplateLoader
+		$subject   = self::pick_random( $template['subject'] ?? [] );
+		$text      = self::pick_random( $template['text'] ?? [] );
+		$html      = self::pick_random( $template['html'] ?? [] );
+		$from_name = self::pick_random( $template['from_name'] ?? [] );
 		
 		// 4. Decode Content (Base64 check)
 		$subject   = self::maybe_decode( $subject );
@@ -119,7 +121,8 @@ class TemplateEngine {
 		return $string;
 	}
 
-	public static function pick_random( $array ) {
+	public static function pick_random( $array ): string {
+		if ( ! is_array( $array ) || empty( $array ) ) return '';
 		return TemplateLoader::pick_random( $array );
 	}
 
@@ -133,7 +136,7 @@ class TemplateEngine {
 	public static function render_string( $text, $context = [] ) {
 		if ( ! is_string( $text ) || empty( $text ) ) return $text;
 
-		// 1. Process Spintax first (so vars can be inside spintax if needed, or vice-versa? usually spintax first)
+		// 1. Process Spintax first
 		$text = self::process_spintax( $text );
 
 		// 2. Apply Placeholders
@@ -144,9 +147,7 @@ class TemplateEngine {
 
 	public static function apply_placeholders( $text, $vars ) {
 		foreach ( $vars as $key => $value ) {
-			// Handle simple variables {{key}}
-			$text = str_replace( "{{{$key}}}", $value, $text );
-			// Handle capitalized variables {{Key}} ? No, stick to simple for now.
+			$text = str_replace( "{{{$key}}}", (string)$value, $text );
 		}
 		return $text;
 	}
@@ -154,9 +155,6 @@ class TemplateEngine {
 	public static function process_spintax( $text ) {
 		if ( ! is_string( $text ) || empty( $text ) ) return $text;
 
-		// Iteratively replace innermost spintax patterns until none remain
-		// Pattern matches {option1|option2|...}
-		// NOTE: Regex requires at least one '|' to differentiate from {{variables}}
 		while ( preg_match( '/\{([^{}]*\|[^{}]*)\}/', $text ) ) {
 			$text = preg_replace_callback( '/\{([^{}]*\|[^{}]*)\}/', function( $matches ) {
 				$options = explode( '|', $matches[1] );

@@ -1,97 +1,96 @@
-<?php
-/**
- * Vue Règles de Réponse
- */
+<div class="wrap postal-warmup-wrap">
+	<h1 class="wp-heading-inline"><?php _e( 'Règles de Réponse Automatique', 'postal-warmup' ); ?></h1>
+	<button id="pw-add-rule" class="page-title-action"><?php _e( 'Ajouter une Règle', 'postal-warmup' ); ?></button>
+	<hr class="wp-header-end">
 
-if (!defined('ABSPATH')) exit;
+	<div class="pw-container">
+		<!-- List View -->
+		<div id="pw-rules-list" class="pw-card">
+			<table class="wp-list-table widefat fixed striped">
+				<thead>
+					<tr>
+						<th width="50"><?php _e( 'ID', 'postal-warmup' ); ?></th>
+						<th><?php _e( 'Nom', 'postal-warmup' ); ?></th>
+						<th><?php _e( 'Conditions', 'postal-warmup' ); ?></th>
+						<th><?php _e( 'Réponse (Template)', 'postal-warmup' ); ?></th>
+						<th><?php _e( 'Scénario Déclenché', 'postal-warmup' ); ?></th>
+						<th width="80"><?php _e( 'Priorité', 'postal-warmup' ); ?></th>
+						<th width="80"><?php _e( 'Actif', 'postal-warmup' ); ?></th>
+						<th width="150"><?php _e( 'Actions', 'postal-warmup' ); ?></th>
+					</tr>
+				</thead>
+				<tbody id="pw-rules-tbody">
+					<tr><td colspan="8"><?php _e( 'Chargement...', 'postal-warmup' ); ?></td></tr>
+				</tbody>
+			</table>
+		</div>
 
-use PostalWarmup\Models\ReplyTemplateRule;
-use PostalWarmup\Admin\TemplateManager;
+		<!-- Edit View (Hidden) -->
+		<div id="pw-rule-editor" class="pw-card" style="display:none;">
+			<h2 id="pw-rule-editor-title"><?php _e( 'Éditer la Règle', 'postal-warmup' ); ?></h2>
+			<form id="pw-rule-form">
+				<input type="hidden" name="id" id="rule_id" value="">
 
-$rules = ReplyTemplateRule::get_all();
-$templates = TemplateManager::get_all_with_meta();
-?>
+				<div class="pw-form-row">
+					<label><?php _e( 'Nom de la règle', 'postal-warmup' ); ?></label>
+					<input type="text" name="name" id="rule_name" required class="regular-text">
+				</div>
 
-<div class="wrap pw-dashboard" id="pw-reply-rules-page">
-    <div class="pw-header">
-        <h1>⚡ Règles de Réponse Automatique</h1>
-        <button id="pw-new-rule-btn" class="button button-primary">Nouvelle Règle</button>
-    </div>
+				<div class="pw-section-title"><?php _e( 'Conditions de Déclenchement (ET)', 'postal-warmup' ); ?></div>
 
-    <div class="pw-card">
-        <table class="wp-list-table widefat fixed striped">
-            <thead>
-                <tr>
-                    <th>Nom</th>
-                    <th>Condition (Préfixe)</th>
-                    <th>Réponse (Template)</th>
-                    <th>Statut</th>
-                    <th style="width: 150px;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (empty($rules)): ?>
-                    <tr><td colspan="5">Aucune règle configurée.</td></tr>
-                <?php else: ?>
-                    <?php foreach ($rules as $r): ?>
-                        <tr data-rule="<?php echo esc_attr(json_encode($r)); ?>">
-                            <td><strong><?php echo esc_html($r['name']); ?></strong></td>
-                            <td><code><?php echo esc_html($r['match_prefix']); ?></code></td>
-                            <td><?php echo esc_html($r['response_template_name']); ?></td>
-                            <td>
-                                <span class="pw-badge <?php echo $r['active'] ? 'success' : 'warning'; ?>">
-                                    <?php echo $r['active'] ? 'Actif' : 'Inactif'; ?>
-                                </span>
-                            </td>
-                            <td>
-                                <button class="button button-small pw-edit-rule-btn">Modifier</button>
-                                <button class="button button-small button-link-delete pw-delete-rule-btn" data-id="<?php echo $r['id']; ?>">Supprimer</button>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
-</div>
+				<div class="pw-grid-2">
+					<div class="pw-form-row">
+						<label><?php _e( 'Serveur ID (Optionnel)', 'postal-warmup' ); ?></label>
+						<input type="number" name="match_server_id" id="rule_match_server_id" placeholder="Ex: 1">
+						<p class="description"><?php _e( 'Laisser vide pour tous les serveurs.', 'postal-warmup' ); ?></p>
+					</div>
+					<div class="pw-form-row">
+						<label><?php _e( 'Préfixe Email (Optionnel)', 'postal-warmup' ); ?></label>
+						<input type="text" name="match_prefix" id="rule_match_prefix" placeholder="Ex: contact">
+					</div>
+				</div>
 
-<!-- Modal Editor -->
-<div id="pw-rule-editor-modal" class="pw-modal" style="display:none;">
-    <div class="pw-modal-content">
-        <span class="pw-modal-close">&times;</span>
-        <h2 id="pw-rule-modal-title">Éditeur de Règle</h2>
+				<div class="pw-form-row">
+					<label><?php _e( 'Sujet contient (Optionnel)', 'postal-warmup' ); ?></label>
+					<input type="text" name="match_subject_contains" id="rule_match_subject_contains" class="large-text">
+				</div>
 
-        <form id="pw-rule-form">
-            <input type="hidden" id="pw-rule-id">
+				<div class="pw-form-row">
+					<label><?php _e( 'Corps contient (Optionnel)', 'postal-warmup' ); ?></label>
+					<input type="text" name="match_body_contains" id="rule_match_body_contains" class="large-text">
+				</div>
 
-            <div class="pw-form-group">
-                <label>Nom de la règle</label>
-                <input type="text" id="pw-rule-name" class="widefat" required>
-            </div>
+				<div class="pw-section-title"><?php _e( 'Actions', 'postal-warmup' ); ?></div>
 
-            <div class="pw-form-group">
-                <label>Si le préfixe de l'email reçu est :</label>
-                <input type="text" id="pw-rule-prefix" class="widefat" placeholder="ex: contact">
-                <p class="description">Laisser vide pour matcher tous les emails.</p>
-            </div>
+				<div class="pw-form-row">
+					<label><?php _e( 'Template de Réponse', 'postal-warmup' ); ?></label>
+					<input type="text" name="response_template_name" id="rule_response_template_name" required placeholder="template-slug">
+				</div>
 
-            <div class="pw-form-group">
-                <label>Alors répondre avec le template :</label>
-                <select id="pw-rule-template" class="widefat">
-                    <?php foreach ($templates as $t): ?>
-                        <option value="<?php echo esc_attr($t['name']); ?>"><?php echo esc_html($t['name']); ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
+				<div class="pw-form-row">
+					<label><?php _e( 'Démarrer Scénario (ID)', 'postal-warmup' ); ?></label>
+					<input type="number" name="scenario_id" id="rule_scenario_id" placeholder="Ex: 5">
+				</div>
 
-            <div class="pw-form-group">
-                <label><input type="checkbox" id="pw-rule-active" value="1"> Activer cette règle</label>
-            </div>
+				<div class="pw-grid-2">
+					<div class="pw-form-row">
+						<label><?php _e( 'Priorité', 'postal-warmup' ); ?></label>
+						<input type="number" name="priority" id="rule_priority" value="10">
+					</div>
+					<div class="pw-form-row">
+						<label><?php _e( 'Statut', 'postal-warmup' ); ?></label>
+						<select name="active" id="rule_active">
+							<option value="1"><?php _e( 'Actif', 'postal-warmup' ); ?></option>
+							<option value="0"><?php _e( 'Inactif', 'postal-warmup' ); ?></option>
+						</select>
+					</div>
+				</div>
 
-            <div class="pw-modal-actions">
-                <button type="button" class="button pw-modal-cancel">Annuler</button>
-                <button type="button" id="pw-save-rule-btn" class="button button-primary">Enregistrer</button>
-            </div>
-        </form>
-    </div>
+				<div class="pw-actions-bar">
+					<button type="submit" class="button button-primary"><?php _e( 'Enregistrer', 'postal-warmup' ); ?></button>
+					<button type="button" class="button" id="pw-cancel-rule-edit"><?php _e( 'Annuler', 'postal-warmup' ); ?></button>
+				</div>
+			</form>
+		</div>
+	</div>
 </div>

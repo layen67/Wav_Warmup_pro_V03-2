@@ -1,4 +1,5 @@
 <?php
+// src/Core/Activator.php
 
 declare(strict_types=1);
 
@@ -6,8 +7,6 @@ namespace PostalWarmup\Core;
 
 use PostalWarmup\Services\Logger;
 use PostalWarmup\Admin\Settings;
-
-
 
 /**
  * Fired during plugin activation.
@@ -389,10 +388,9 @@ class Activator {
 			loop_cycle int DEFAULT 0,
 			last_contact_at datetime NULL,
 			next_scheduled_at datetime NULL,
-			templates_sent json NULL,
+			templates_sent longtext NULL COMMENT 'JSON array of sent template names',
 			waiting_for_reply tinyint(1) DEFAULT 1,
 			pending_reply tinyint(1) DEFAULT 0,
-			reactivation_scheduled tinyint(1) DEFAULT 0,
 			migration_status varchar(20) DEFAULT 'none',
 			migrated_to_server_id int NULL,
 			migrated_at datetime NULL,
@@ -402,7 +400,6 @@ class Activator {
 			created_at datetime DEFAULT CURRENT_TIMESTAMP,
 			updated_at datetime DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id),
-			UNIQUE KEY unique_active_contact (contact_email, server_id, status),
 			KEY idx_contact (contact_email),
 			KEY idx_server (server_id),
 			KEY idx_status (status),
@@ -417,8 +414,8 @@ class Activator {
 			name varchar(255) NOT NULL,
 			description text NULL,
 			trigger_event varchar(100) NOT NULL DEFAULT 'reply',
-			conditions json NULL,
-			steps json NOT NULL,
+			conditions longtext NULL COMMENT 'JSON',
+			steps longtext NOT NULL COMMENT 'JSON array of steps',
 			reply_template_name varchar(255) NULL,
 			migration_template varchar(255) NULL,
 			loop_back_to_stage int DEFAULT 0,
@@ -426,7 +423,7 @@ class Activator {
 			require_reply_to_advance tinyint(1) DEFAULT 1,
 			reactivation_delay_days int DEFAULT 7,
 			reactivation_template varchar(255) NULL,
-			allowed_server_ids json NULL,
+			allowed_server_ids longtext NULL COMMENT 'JSON array of server IDs, NULL = all',
 			priority int DEFAULT 10,
 			active tinyint(1) DEFAULT 1,
 			created_at datetime DEFAULT CURRENT_TIMESTAMP,
@@ -532,33 +529,21 @@ class Activator {
 	}
 
 	private static function schedule_cron_jobs(): void {
-		if ( ! wp_next_scheduled( 'pw_cleanup_old_logs' ) ) {
-			wp_schedule_event( time(), 'daily', 'pw_cleanup_old_logs' );
-		}
-		if ( ! wp_next_scheduled( 'pw_cleanup_old_stats' ) ) {
-			wp_schedule_event( time(), 'weekly', 'pw_cleanup_old_stats' );
-		}
-		if ( ! wp_next_scheduled( 'pw_daily_stats_aggregation' ) ) {
-			wp_schedule_event( time(), 'daily', 'pw_daily_stats_aggregation' );
-		}
-		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
-			wp_schedule_event( time(), 'daily', 'pw_daily_report' );
-		}
-		if ( ! wp_next_scheduled( 'pw_process_queue' ) ) {
-			wp_schedule_event( time(), 'every_minute', 'pw_process_queue' );
-		}
-		if ( ! wp_next_scheduled( 'pw_warmup_daily_increment' ) ) {
-			wp_schedule_event( strtotime('tomorrow 00:00:00'), 'daily', 'pw_warmup_daily_increment' );
-		}
-		if ( ! wp_next_scheduled( 'pw_cleanup_queue' ) ) {
-			wp_schedule_event( time(), 'daily', 'pw_cleanup_queue' );
-		}
-		if ( ! wp_next_scheduled( 'pw_advisor_check' ) ) {
-			wp_schedule_event( time(), 'hourly', 'pw_advisor_check' );
-		}
-		// New Scenarios cron
-		if ( ! wp_next_scheduled( 'pw_scenario_daily_check' ) ) {
-			wp_schedule_event( time(), 'daily', 'pw_scenario_daily_check' );
+		$jobs = [
+			'pw_process_queue' => ['interval' => 'every_minute', 'offset' => 0],
+			'pw_warmup_daily_increment' => ['interval' => 'daily', 'offset' => strtotime('tomorrow 00:00:00') - time()],
+			'pw_cleanup_old_logs' => ['interval' => 'daily', 'offset' => 0],
+			'pw_daily_report' => ['interval' => 'daily', 'offset' => 0],
+			'pw_cleanup_old_stats' => ['interval' => 'daily', 'offset' => 0],
+			'pw_daily_stats_aggregation'=> ['interval' => 'daily', 'offset' => 0],
+			'pw_cleanup_queue' => ['interval' => 'daily', 'offset' => 0],
+			'pw_scenario_daily_check' => ['interval' => 'daily', 'offset' => 0],
+		];
+
+		foreach ($jobs as $hook => $cfg) {
+			if (!wp_next_scheduled($hook)) {
+				wp_schedule_event(time() + $cfg['offset'], $cfg['interval'], $hook);
+			}
 		}
 	}
 }

@@ -1,4 +1,5 @@
 <?php
+// src/Core/Plugin.php
 
 declare(strict_types=1);
 
@@ -16,8 +17,9 @@ use PostalWarmup\Services\PostalRouteManager;
 use PostalWarmup\Models\Database;
 use PostalWarmup\Admin\ScenarioManager;
 use PostalWarmup\Admin\ReplyRuleManager;
-
-
+use PostalWarmup\Services\QueueManager;
+use PostalWarmup\Services\EmailNotifications;
+use PostalWarmup\Models\Stats;
 
 /**
  * The core plugin class.
@@ -90,6 +92,7 @@ class Plugin {
 			'get_server_conversation_stats', 'delete_server_with_options',
 			'prepare_server_migration', 'execute_server_migration',
 			'get_migration_status', 'rollback_migration', 'delete_server_post_migration',
+			'configure_incoming_route', 'configure_all_routes',
 			// Conversation Actions
 			'force_advance_conversation', 'cancel_conversation',
 			'get_conversations', 'get_conversation_detail',
@@ -103,8 +106,10 @@ class Plugin {
 		// Scenario & Rules AJAX
 		$this->loader->add_action( 'wp_ajax_pw_save_scenario', $scenario_manager, 'ajax_save_scenario' );
 		$this->loader->add_action( 'wp_ajax_pw_delete_scenario', $scenario_manager, 'ajax_delete_scenario' );
+		$this->loader->add_action( 'wp_ajax_pw_get_scenarios', $scenario_manager, 'ajax_get_scenarios' );
 		$this->loader->add_action( 'wp_ajax_pw_save_reply_rule', $reply_rule_manager, 'ajax_save_reply_rule' );
 		$this->loader->add_action( 'wp_ajax_pw_delete_reply_rule', $reply_rule_manager, 'ajax_delete_reply_rule' );
+		$this->loader->add_action( 'wp_ajax_pw_get_reply_rules', $reply_rule_manager, 'ajax_get_reply_rules' );
 	}
 
 	private function define_api_hooks(): void {
@@ -159,22 +164,16 @@ class Plugin {
 	}
 
 	private function define_cron_hooks(): void {
-		$this->loader->add_action( 'pw_cleanup_old_logs', 'PostalWarmup\Services\Logger', 'cleanup_old_logs' );
-		$this->loader->add_action( 'pw_daily_report', 'PostalWarmup\Services\EmailNotifications', 'send_daily_report' );
-		$this->loader->add_action( 'pw_cleanup_old_stats', 'PostalWarmup\Models\Stats', 'cleanup_old_stats' );
-		$this->loader->add_action( 'pw_daily_stats_aggregation', 'PostalWarmup\Models\Stats', 'aggregate_daily_stats' );
-		$this->loader->add_action( 'pw_process_queue', 'PostalWarmup\Services\QueueManager', 'process_queue' );
-		$this->loader->add_action( 'pw_warmup_daily_increment', 'PostalWarmup\Models\Stats', 'increment_warmup_day' );
-		$this->loader->add_action( 'pw_cleanup_queue', 'PostalWarmup\Services\QueueManager', 'cleanup' );
-
-		if ( get_option( 'pw_advisor_enabled', true ) ) {
-			$this->loader->add_action( 'pw_advisor_check', 'PostalWarmup\Services\WarmupAdvisor', 'run' );
-		}
-
-		// New Scenario hooks
-		$this->loader->add_action( 'pw_scenario_daily_check', 'PostalWarmup\Services\ScenarioEngine', 'daily_check' );
-		$this->loader->add_action( 'pw_send_engagement_step', 'PostalWarmup\Services\ScenarioEngine', 'send_engagement_step', 10, 1 );
-		$this->loader->add_action( 'pw_check_contact_silence', 'PostalWarmup\Services\ScenarioEngine', 'handle_contact_silence', 10, 1 );
+		$this->loader->add_action('pw_process_queue', QueueManager::class, 'process_queue');
+		$this->loader->add_action('pw_cleanup_old_logs', Logger::class, 'cleanup_old_logs');
+		$this->loader->add_action('pw_daily_report', EmailNotifications::class, 'send_daily_report');
+		$this->loader->add_action('pw_cleanup_old_stats', Stats::class, 'cleanup_old_stats');
+		$this->loader->add_action('pw_daily_stats_aggregation', Stats::class, 'aggregate_daily_stats');
+		$this->loader->add_action('pw_warmup_daily_increment', Stats::class, 'increment_warmup_day');
+		$this->loader->add_action('pw_cleanup_queue', QueueManager::class, 'cleanup');
+		$this->loader->add_action('pw_scenario_daily_check', ScenarioEngine::class, 'daily_check');
+		$this->loader->add_action('pw_send_engagement_step', ScenarioEngine::class, 'send_engagement_step', 10, 1);
+		$this->loader->add_action('pw_check_contact_silence', ScenarioEngine::class, 'handle_contact_silence', 10, 1);
 	}
 
 	public function check_upgrade(): void {

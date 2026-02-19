@@ -1,139 +1,153 @@
 <?php
+// src/Services/PostalRouteManager.php
 
 declare(strict_types=1);
 
 namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Database;
-use PostalWarmup\API\Client;
 use PostalWarmup\Admin\Settings;
-use PostalWarmup\Services\Encryption;
 
-
-
+/**
+ * Manages Routes and Endpoints in Postal via API.
+ */
 class PostalRouteManager {
 
-	public static function ensure_route_configured( array $server ): array {
-		if ( empty( $server['api_key'] ) ) {
-			return [ 'success' => false, 'message' => 'API Key missing' ];
+	/**
+	 * Creates an endpoint in Postal pointing to this plugin's webhook.
+	 */
+	public static function ensure_webhook_endpoint( int $server_id ): array {
+		$server = Database::get_server( $server_id );
+		if ( ! $server ) return [ 'error' => 'Server not found' ];
+
+		$webhook_url = get_rest_url( null, 'postal-warmup/v1/webhook' );
+
+		// Check if endpoint exists
+		// We need to list endpoints from Postal API
+		// API: GET /api/v1/endpoints
+
+		$endpoints = self::api_request( $server, 'GET', 'endpoints' );
+		if ( isset( $endpoints['error'] ) ) return $endpoints;
+
+		$existing_id = null;
+		foreach ( $endpoints['data'] ?? [] as $ep ) {
+			if ( $ep['url'] === $webhook_url ) {
+				$existing_id = $ep['id'];
+				break;
+			}
 		}
 
-		// 1. HTTP Endpoint
-		$endpoint_id = self::get_or_create_http_endpoint( $server );
-		if ( ! $endpoint_id ) {
-			return [ 'success' => false, 'message' => 'Failed to create HTTP Endpoint' ];
+		if ( $existing_id ) {
+			// Update just in case? Or return success
+			return [ 'success' => true, 'endpoint_id' => $existing_id, 'message' => 'Endpoint already exists' ];
 		}
 
-		// 2. Route
-		$route_id = self::get_or_create_route( $server, $endpoint_id );
-		if ( ! $route_id ) {
-			return [ 'success' => false, 'message' => 'Failed to create Route' ];
-		}
-
-		// 3. Update DB
-		global $wpdb;
-		$wpdb->update(
-			$wpdb->prefix . 'postal_servers',
-			[
-				'postal_endpoint_id' => $endpoint_id,
-				'postal_route_id' => $route_id,
-				'incoming_configured' => 1,
-				'incoming_last_check' => current_time( 'mysql' )
-			],
-			[ 'id' => $server['id'] ]
-		);
-
-		return [ 'success' => true, 'route_id' => $route_id ];
-	}
-
-	private static function get_or_create_http_endpoint( array $server ): string|false {
-		// Check existing
-		if ( ! empty( $server['postal_endpoint_id'] ) ) {
-			// Verify existence? (Optional optimization)
-			return $server['postal_endpoint_id'];
-		}
-
-		$url = self::get_webhook_url();
+		// Create Endpoint
+		// API: POST /api/v1/endpoints
 		$payload = [
-			'name' => 'Postal Warmup Pro - WordPress',
-			'url' => $url,
-			'encoding' => 'JSON',
-			'strip_replies' => true,
-			'include_attachments' => false
+			'url' => $webhook_url,
+			'encoding' => 'json',
+			'format' => 'full',
+			'events' => [ 'MessageSent', 'MessageDelayed', 'MessageDeliveryFailed', 'MessageHeld', 'MessageBounced' ]
 		];
 
-		$result = Client::request( (int)$server['id'], 'http_endpoints', 'POST', $payload );
+		$create = self::api_request( $server, 'POST', 'endpoints', $payload );
 
-		if ( ! is_wp_error( $result ) && isset( $result['id'] ) ) {
-			return (string) $result['id'];
+		if ( isset( $create['data']['id'] ) ) {
+			// Update server record locally
+			global $wpdb;
+			$wpdb->update( $wpdb->prefix . 'postal_servers', [
+				'postal_endpoint_id' => $create['data']['id']
+			], [ 'id' => $server_id ] );
+
+			return [ 'success' => true, 'endpoint_id' => $create['data']['id'] ];
 		}
 
-		return false;
+		return [ 'error' => 'Failed to create endpoint' ];
 	}
 
-	private static function get_or_create_route( array $server, string $endpoint_id ): string|false {
-		if ( ! empty( $server['postal_route_id'] ) ) {
-			return $server['postal_route_id'];
+	/**
+	 * Creates a route to forward incoming mail to the webhook (via HTTP endpoint).
+	 * Usually we want to capture ALL incoming mail to handle replies.
+	 */
+	public static function ensure_route( int $server_id, string $endpoint_id ): array {
+		$server = Database::get_server( $server_id );
+		if ( ! $server ) return [ 'error' => 'Server not found' ];
+
+		// List Routes
+		$routes = self::api_request( $server, 'GET', 'routes' );
+		if ( isset( $routes['error'] ) ) return $routes;
+
+		// We look for a route that matches "reply-*" or similar, or a catch-all if desired.
+		// Strategy: Create a route for "reply-*" to the endpoint.
+		// Postal Route Format: name (prefix), domain (optional), endpoint_id, mode (Endpoint)
+
+		$route_name = 'reply-*'; // Wildcard for reply-123-hash@...
+
+		$existing_id = null;
+		foreach ( $routes['data'] ?? [] as $route ) {
+			if ( $route['name'] === $route_name && $route['endpoint_id'] == $endpoint_id ) {
+				$existing_id = $route['id'];
+				break;
+			}
 		}
 
+		if ( $existing_id ) {
+			return [ 'success' => true, 'route_id' => $existing_id, 'message' => 'Route already exists' ];
+		}
+
+		// Create Route
 		$payload = [
-			'name' => 'WordPress Incoming',
-			'endpoint_type' => 'HTTPEndpoint',
+			'name' => $route_name,
+			'mode' => 'Endpoint',
 			'endpoint_id' => $endpoint_id,
-			'matcher' => '*',
 			'spam_mode' => 'Mark'
 		];
 
-		$result = Client::request( (int)$server['id'], 'routes', 'POST', $payload );
+		$create = self::api_request( $server, 'POST', 'routes', $payload );
 
-		if ( ! is_wp_error( $result ) && isset( $result['id'] ) ) {
-			return (string) $result['id'];
+		if ( isset( $create['data']['id'] ) ) {
+			global $wpdb;
+			$wpdb->update( $wpdb->prefix . 'postal_servers', [
+				'postal_route_id' => $create['data']['id'],
+				'incoming_configured' => 1,
+				'incoming_last_check' => current_time( 'mysql' )
+			], [ 'id' => $server_id ] );
+
+			return [ 'success' => true, 'route_id' => $create['data']['id'] ];
 		}
 
-		return false;
+		return [ 'error' => 'Failed to create route' ];
 	}
 
-	public static function verify_route( array $server ): bool {
-		if ( empty( $server['postal_route_id'] ) ) return false;
+	private static function api_request( array $server, string $method, string $endpoint, array $data = [] ): array {
+		$url = rtrim( $server['api_url'], '/' ) . '/' . $endpoint;
+		$args = [
+			'method' => $method,
+			'headers' => [
+				'X-Server-API-Key' => $server['api_key'],
+				'Content-Type' => 'application/json'
+			],
+			'timeout' => 15
+		];
 
-		$result = Client::request( (int)$server['id'], 'routes/' . $server['postal_route_id'] );
-
-		$valid = ( ! is_wp_error( $result ) && isset( $result['id'] ) );
-
-		global $wpdb;
-		$wpdb->update(
-			$wpdb->prefix . 'postal_servers',
-			[ 'incoming_last_check' => current_time( 'mysql' ), 'incoming_configured' => $valid ? 1 : 0 ],
-			[ 'id' => $server['id'] ]
-		);
-
-		return $valid;
-	}
-
-	public static function remove_route( array $server ): bool {
-		if ( ! empty( $server['postal_route_id'] ) ) {
-			Client::request( (int)$server['id'], 'routes/' . $server['postal_route_id'], 'DELETE' );
-		}
-		if ( ! empty( $server['postal_endpoint_id'] ) ) {
-			Client::request( (int)$server['id'], 'http_endpoints/' . $server['postal_endpoint_id'], 'DELETE' );
+		if ( ! empty( $data ) ) {
+			$args['body'] = json_encode( $data );
 		}
 
-		global $wpdb;
-		$wpdb->update(
-			$wpdb->prefix . 'postal_servers',
-			[ 'postal_route_id' => null, 'postal_endpoint_id' => null, 'incoming_configured' => 0 ],
-			[ 'id' => $server['id'] ]
-		);
+		$response = wp_remote_request( $url, $args );
 
-		return true;
-	}
-
-	public static function get_webhook_url(): string {
-		$url = get_rest_url( null, 'postal-warmup/v1/webhook' );
-		$secret = get_option( 'pw_webhook_secret' );
-		if ( $secret ) {
-			$url = add_query_arg( 'token', $secret, $url );
+		if ( is_wp_error( $response ) ) {
+			return [ 'error' => $response->get_error_message() ];
 		}
-		return $url;
+
+		$body = wp_remote_retrieve_body( $response );
+		$json = json_decode( $body, true );
+
+		if ( ! $json || ( isset( $json['status'] ) && $json['status'] !== 'success' ) ) {
+			return [ 'error' => $json['message'] ?? 'API Error' ];
+		}
+
+		return $json;
 	}
 }

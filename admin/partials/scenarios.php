@@ -1,147 +1,96 @@
-<?php
-/**
- * Vue Scénarios (Engagement Engine)
- */
+<div class="wrap postal-warmup-wrap">
+	<h1 class="wp-heading-inline"><?php _e( 'Scénarios de Conversation', 'postal-warmup' ); ?></h1>
+	<button id="pw-add-scenario" class="page-title-action"><?php _e( 'Ajouter un Scénario', 'postal-warmup' ); ?></button>
+	<hr class="wp-header-end">
 
-if (!defined('ABSPATH')) exit;
+	<div class="pw-container">
+		<!-- List View -->
+		<div id="pw-scenarios-list" class="pw-card">
+			<table class="wp-list-table widefat fixed striped">
+				<thead>
+					<tr>
+						<th width="50"><?php _e( 'ID', 'postal-warmup' ); ?></th>
+						<th><?php _e( 'Nom', 'postal-warmup' ); ?></th>
+						<th><?php _e( 'Trigger', 'postal-warmup' ); ?></th>
+						<th><?php _e( 'Étapes', 'postal-warmup' ); ?></th>
+						<th width="80"><?php _e( 'Priorité', 'postal-warmup' ); ?></th>
+						<th width="80"><?php _e( 'Actif', 'postal-warmup' ); ?></th>
+						<th width="150"><?php _e( 'Actions', 'postal-warmup' ); ?></th>
+					</tr>
+				</thead>
+				<tbody id="pw-scenarios-tbody">
+					<tr><td colspan="7"><?php _e( 'Chargement...', 'postal-warmup' ); ?></td></tr>
+				</tbody>
+			</table>
+		</div>
 
-use PostalWarmup\Models\Scenario;
-use PostalWarmup\Admin\TemplateManager;
+		<!-- Edit View (Hidden) -->
+		<div id="pw-scenario-editor" class="pw-card" style="display:none;">
+			<h2 id="pw-editor-title"><?php _e( 'Éditer le Scénario', 'postal-warmup' ); ?></h2>
+			<form id="pw-scenario-form">
+				<input type="hidden" name="id" id="scenario_id" value="">
 
-$scenarios = Scenario::get_all();
-$templates = TemplateManager::get_all_with_meta();
-?>
+				<div class="pw-form-row">
+					<label><?php _e( 'Nom', 'postal-warmup' ); ?></label>
+					<input type="text" name="name" id="scenario_name" required class="regular-text">
+				</div>
 
-<div class="wrap pw-dashboard" id="pw-scenarios-page">
-    <div class="pw-header">
-        <h1>🚀 Scénarios d'Engagement</h1>
-        <button id="pw-new-scenario-btn" class="button button-primary">Nouveau Scénario</button>
-    </div>
+				<div class="pw-form-row">
+					<label><?php _e( 'Description', 'postal-warmup' ); ?></label>
+					<textarea name="description" id="scenario_description" class="large-text" rows="2"></textarea>
+				</div>
 
-    <div class="pw-card">
-        <table class="wp-list-table widefat fixed striped">
-            <thead>
-                <tr>
-                    <th>Nom</th>
-                    <th>Déclencheur</th>
-                    <th>Étapes</th>
-                    <th>Statut</th>
-                    <th style="width: 150px;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (empty($scenarios)): ?>
-                    <tr><td colspan="5">Aucun scénario configuré.</td></tr>
-                <?php else: ?>
-                    <?php foreach ($scenarios as $s): ?>
-                        <tr data-scenario="<?php echo esc_attr(json_encode($s)); ?>">
-                            <td><strong><?php echo esc_html($s['name']); ?></strong></td>
-                            <td><code><?php echo esc_html($s['trigger_event']); ?></code></td>
-                            <td><?php echo count($s['steps']); ?> étapes</td>
-                            <td>
-                                <span class="pw-badge <?php echo $s['active'] ? 'success' : 'warning'; ?>">
-                                    <?php echo $s['active'] ? 'Actif' : 'Inactif'; ?>
-                                </span>
-                            </td>
-                            <td>
-                                <button class="button button-small pw-edit-scenario-btn">Modifier</button>
-                                <button class="button button-small button-link-delete pw-delete-scenario-btn" data-id="<?php echo $s['id']; ?>">Supprimer</button>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
+				<div class="pw-grid-2">
+					<div class="pw-form-row">
+						<label><?php _e( 'Priorité', 'postal-warmup' ); ?></label>
+						<input type="number" name="priority" id="scenario_priority" value="10">
+					</div>
+					<div class="pw-form-row">
+						<label><?php _e( 'Statut', 'postal-warmup' ); ?></label>
+						<select name="active" id="scenario_active">
+							<option value="1"><?php _e( 'Actif', 'postal-warmup' ); ?></option>
+							<option value="0"><?php _e( 'Inactif', 'postal-warmup' ); ?></option>
+						</select>
+					</div>
+				</div>
+
+				<h3><?php _e( 'Étapes du Scénario', 'postal-warmup' ); ?></h3>
+				<div id="pw-steps-container">
+					<!-- Steps rendered via JS -->
+				</div>
+				<button type="button" class="button" id="pw-add-step"><?php _e( '+ Ajouter une étape', 'postal-warmup' ); ?></button>
+
+				<div class="pw-actions-bar">
+					<button type="submit" class="button button-primary"><?php _e( 'Enregistrer', 'postal-warmup' ); ?></button>
+					<button type="button" class="button" id="pw-cancel-edit"><?php _e( 'Annuler', 'postal-warmup' ); ?></button>
+				</div>
+			</form>
+		</div>
+	</div>
 </div>
 
-<!-- Modal Editor -->
-<div id="pw-scenario-editor-modal" class="pw-modal" style="display:none;">
-    <div class="pw-modal-content large">
-        <span class="pw-modal-close">&times;</span>
-        <h2 id="pw-scenario-modal-title">Éditeur de Scénario</h2>
-
-        <form id="pw-scenario-form">
-            <input type="hidden" id="pw-scenario-id">
-
-            <div class="pw-form-row">
-                <div class="pw-col-6">
-                    <label>Nom du Scénario</label>
-                    <input type="text" id="pw-scenario-name" class="widefat" required>
-                </div>
-                <div class="pw-col-3">
-                    <label>Déclencheur</label>
-                    <select id="pw-scenario-trigger" class="widefat">
-                        <option value="reply">Réponse reçue</option>
-                        <option value="click">Clic mailto</option>
-                    </select>
-                </div>
-                <div class="pw-col-3" style="padding-top: 25px;">
-                    <label><input type="checkbox" id="pw-scenario-active" value="1"> Actif</label>
-                </div>
-            </div>
-
-            <hr>
-
-            <h3>Séquence</h3>
-            <div id="pw-scenario-steps-container"></div>
-
-            <button type="button" id="pw-add-step-btn" class="button button-secondary">+ Ajouter une étape</button>
-
-            <div class="pw-modal-actions">
-                <button type="button" class="button pw-modal-cancel">Annuler</button>
-                <button type="button" id="pw-save-scenario-btn" class="button button-primary">Enregistrer</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Underscore Template for Step Item -->
-<script type="text/html" id="pw-step-item-template">
-    <div class="pw-scenario-step">
-        <div class="pw-step-header">
-            <span class="pw-step-handle dashicons dashicons-move"></span>
-            <strong>Étape <span class="pw-step-number"><%- index %></span></strong>
-            <button type="button" class="pw-remove-step-btn dashicons dashicons-no-alt"></button>
-        </div>
-        <div class="pw-step-body">
-            <label>Délai (jours) :
-                <input type="number" class="pw-step-delay" value="<%- delay %>" min="0" style="width: 60px;">
-            </label>
-            <label>Template :
-                <select class="pw-step-template">
-                    <option value="">-- Sélectionner --</option>
-                    <?php foreach ($templates as $t): ?>
-                        <option value="<?php echo esc_attr($t['name']); ?>"
-                            <% if (template_name === '<?php echo esc_js($t['name']); ?>') { %>selected<% } %>>
-                            <?php echo esc_html($t['name']); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-        </div>
-    </div>
+<script type="text/template" id="tmpl-pw-step">
+	<div class="pw-step-item" data-index="{{index}}">
+		<div class="pw-step-header">
+			<span class="pw-step-title"><?php _e( 'Étape', 'postal-warmup' ); ?> #{{displayIndex}}</span>
+			<button type="button" class="pw-remove-step dashicons dashicons-trash"></button>
+		</div>
+		<div class="pw-step-body">
+			<div class="pw-form-row">
+				<label><?php _e( 'Action', 'postal-warmup' ); ?></label>
+				<select name="steps[{{index}}][action]" class="pw-step-action">
+					<option value="send_email" {{action_send_email}}><?php _e( 'Envoyer Email', 'postal-warmup' ); ?></option>
+					<option value="wait" {{action_wait}}><?php _e( 'Attendre', 'postal-warmup' ); ?></option>
+				</select>
+			</div>
+			<div class="pw-form-row pw-step-template">
+				<label><?php _e( 'Template', 'postal-warmup' ); ?></label>
+				<input type="text" name="steps[{{index}}][template]" value="{{template}}" placeholder="template-slug">
+			</div>
+			<div class="pw-form-row">
+				<label><?php _e( 'Délai (heures après étape préc.)', 'postal-warmup' ); ?></label>
+				<input type="number" name="steps[{{index}}][delay]" value="{{delay}}">
+			</div>
+		</div>
+	</div>
 </script>
-
-<style>
-.pw-scenario-step {
-    background: #f0f0f1;
-    border: 1px solid #c3c4c7;
-    padding: 10px;
-    margin-bottom: 10px;
-    border-radius: 4px;
-}
-.pw-step-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-    cursor: move;
-}
-.pw-remove-step-btn {
-    background: none;
-    border: none;
-    color: #d63638;
-    cursor: pointer;
-}
-</style>

@@ -1,106 +1,124 @@
 <?php
+// src/Services/ConversationManager.php
 
 declare(strict_types=1);
 
 namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Database;
+use PostalWarmup\Models\Scenario;
+use PostalWarmup\Core\TemplateEngine;
 
-
-
+/**
+ * Manages conversation lifecycle (creation, updates, stage progression).
+ */
 class ConversationManager {
 
-	public static function record_reply( array $data ): int|false {
-		global $wpdb;
-		$table = $wpdb->prefix . 'postal_conversations';
+	private static string $table = 'postal_conversations';
 
-		$defaults = [
+	public static function get_table_name(): string {
+		global $wpdb;
+		return $wpdb->prefix . self::$table;
+	}
+
+	public static function get_by_id( int $id ): ?array {
+		global $wpdb;
+		$table = self::get_table_name();
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $id ), ARRAY_A );
+		if ( $row ) {
+			$row['templates_sent'] = json_decode( $row['templates_sent'], true ) ?: [];
+		}
+		return $row;
+	}
+
+	public static function get_active_conversations( int $limit = 50 ): array {
+		global $wpdb;
+		$table = self::get_table_name();
+		// Fetch conversations that are active, not migrated, and due for action
+		$now = current_time( 'mysql' );
+		$sql = "SELECT * FROM $table
+				WHERE status = 'active'
+				AND migration_status = 'none'
+				AND next_scheduled_at <= %s
+				LIMIT %d";
+
+		return $wpdb->get_results( $wpdb->prepare( $sql, $now, $limit ), ARRAY_A );
+	}
+
+	public static function create_conversation(
+		string $contact_email,
+		int $server_id,
+		int $scenario_id,
+		string $initial_message_id = null
+	): int {
+		global $wpdb;
+		$table = self::get_table_name();
+
+		$wpdb->insert( $table, [
+			'contact_email' => $contact_email,
+			'server_id' => $server_id,
+			'scenario_id' => $scenario_id,
+			'original_message_id' => $initial_message_id,
+			'current_stage' => 0,
+			'loop_cycle' => 0,
 			'status' => 'active',
-			'created_at' => current_time( 'mysql' ),
-			'updated_at' => current_time( 'mysql' ),
+			'waiting_for_reply' => 1, // Usually starts by waiting for reply if initiated by user, or 0 if we initiate.
+			// Assuming we initiate:
 			'last_contact_at' => current_time( 'mysql' ),
-			'templates_sent' => '[]'
+			'next_scheduled_at' => current_time( 'mysql' ), // Ready to process immediately
+			'created_at' => current_time( 'mysql' ),
+			'updated_at' => current_time( 'mysql' )
+		] );
+
+		return $wpdb->insert_id;
+	}
+
+	public static function update_stage( int $conversation_id, int $stage, ?string $next_run = null ): void {
+		global $wpdb;
+		$table = self::get_table_name();
+
+		$data = [
+			'current_stage' => $stage,
+			'updated_at' => current_time( 'mysql' )
 		];
 
-		$data = array_merge( $defaults, $data );
-
-		$result = $wpdb->insert( $table, $data );
-
-		return $result ? (int) $wpdb->insert_id : false;
-	}
-
-	public static function get_active_for_contact( string $email, int $server_id ): ?array {
-		global $wpdb;
-		$table = $wpdb->prefix . 'postal_conversations';
-
-		return $wpdb->get_row( $wpdb->prepare(
-			"SELECT * FROM $table WHERE contact_email = %s AND server_id = %d AND status = 'active' LIMIT 1",
-			$email, $server_id
-		), ARRAY_A );
-	}
-
-	public static function get( int $id ): ?array {
-		global $wpdb;
-		$table = $wpdb->prefix . 'postal_conversations';
-		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $id ), ARRAY_A );
-	}
-
-	public static function update( int $id, array $data ): bool {
-		global $wpdb;
-		$table = $wpdb->prefix . 'postal_conversations';
-		$data['updated_at'] = current_time( 'mysql' );
-
-		return (bool) $wpdb->update( $table, $data, [ 'id' => $id ] );
-	}
-
-	public static function update_last_contact( int $id ): void {
-		self::update( $id, [ 'last_contact_at' => current_time( 'mysql' ) ] );
-	}
-
-	public static function set_waiting( int $id, bool $waiting ): void {
-		self::update( $id, [ 'waiting_for_reply' => $waiting ? 1 : 0 ] );
-	}
-
-	public static function add_template_history( int $id, string $template_name ): void {
-		$conv = self::get( $id );
-		if ( ! $conv ) return;
-
-		$history = json_decode( $conv['templates_sent'] ?? '[]', true ) ?: [];
-		$history[] = $template_name;
-
-		self::update( $id, [ 'templates_sent' => json_encode( $history ) ] );
-	}
-
-	public static function cancel_all_for_contact( string $email ): void {
-		global $wpdb;
-		$table = $wpdb->prefix . 'postal_conversations';
-
-		// Get IDs first to cancel scheduled actions
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM $table WHERE contact_email = %s AND status = 'active'", $email ) );
-
-		foreach ( $ids as $id ) {
-			if ( function_exists( 'as_unschedule_action' ) ) {
-				as_unschedule_action( 'pw_send_engagement_step', [ 'conversation_id' => $id ] );
-				as_unschedule_action( 'pw_check_contact_silence', [ 'conversation_id' => $id ] );
-			}
+		if ( $next_run ) {
+			$data['next_scheduled_at'] = $next_run;
 		}
 
-		$wpdb->update( $table, [ 'status' => 'cancelled' ], [ 'contact_email' => $email, 'status' => 'active' ] );
+		$wpdb->update( $table, $data, [ 'id' => $conversation_id ] );
 	}
 
-	public static function clone_to_server( array $conv, int $to_server_id ): int|false {
-		$new_data = [
-			'contact_email' => $conv['contact_email'],
-			'server_id'     => $to_server_id,
-			'scenario_id'   => $conv['scenario_id'],
-			'from_prefix'   => $conv['from_prefix'],
-			'current_stage' => $conv['current_stage'],
-			'loop_cycle'    => $conv['loop_cycle'],
-			'templates_sent'=> $conv['templates_sent'],
-			'status'        => 'waiting_for_reply', // Assume waiting after handover
-			'waiting_for_reply' => 1
+	public static function mark_reply_received( int $conversation_id, string $body ): void {
+		global $wpdb;
+		$table = self::get_table_name();
+
+		$wpdb->update( $table, [
+			'waiting_for_reply' => 0,
+			'pending_reply' => 1,
+			'reply_body' => $body,
+			'last_contact_at' => current_time( 'mysql' ),
+			'updated_at' => current_time( 'mysql' )
+		], [ 'id' => $conversation_id ] );
+	}
+
+	public static function log_template_sent( int $conversation_id, string $template_name ): void {
+		$conv = self::get_by_id( $conversation_id );
+		if ( ! $conv ) return;
+
+		$history = $conv['templates_sent'] ?? [];
+		$history[] = [
+			'name' => $template_name,
+			'sent_at' => current_time( 'mysql' )
 		];
 
-		return self::record_reply( $new_data );
+		global $wpdb;
+		$table = self::get_table_name();
+		$wpdb->update( $table, [
+			'templates_sent' => json_encode( $history ),
+			'waiting_for_reply' => 1, // Now we wait
+			'pending_reply' => 0,
+			'updated_at' => current_time( 'mysql' )
+		], [ 'id' => $conversation_id ] );
 	}
 }

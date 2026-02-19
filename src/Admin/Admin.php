@@ -63,6 +63,11 @@ class Admin {
 			wp_enqueue_script( 'postal-warmup-templates', PW_PLUGIN_URL . 'admin/assets/js/templates-manager-v3.1.js', [ 'jquery', 'jquery-ui-draggable', 'jquery-ui-droppable', 'underscore', 'wp-util' ], $this->version, true );
 		}
 
+		// Scenarios Manager JS
+		if ( isset( $_GET['page'] ) && in_array( $_GET['page'], [ 'postal-warmup-scenarios', 'postal-warmup-reply-rules' ] ) ) {
+			wp_enqueue_script( 'postal-warmup-scenarios', PW_PLUGIN_URL . 'admin/assets/js/scenarios-manager.js', [ 'jquery', 'jquery-ui-sortable', 'underscore' ], $this->version, true );
+		}
+
 		wp_localize_script( 'postal-warmup-admin', 'pwAdmin', [
 			'ajaxurl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'pw_admin_nonce' ),
@@ -90,6 +95,8 @@ class Admin {
 		add_submenu_page( 'postal-warmup', __( 'Templates', 'postal-warmup' ), __( 'Templates', 'postal-warmup' ), $cap, 'postal-warmup-templates', [ $this, 'display_templates' ] );
 		add_submenu_page( 'postal-warmup', __( 'Statistiques', 'postal-warmup' ), __( 'Statistiques', 'postal-warmup' ), $cap, 'postal-warmup-stats', [ $this, 'display_stats' ] );
 		add_submenu_page( 'postal-warmup', __( 'Logs', 'postal-warmup' ), __( 'Logs', 'postal-warmup' ), $cap, 'postal-warmup-logs', [ $this, 'display_logs' ] );
+		add_submenu_page( 'postal-warmup', __( 'Scénarios', 'postal-warmup' ), __( 'Scénarios', 'postal-warmup' ), $cap, 'postal-warmup-scenarios', [ $this, 'display_scenarios' ] );
+		add_submenu_page( 'postal-warmup', __( 'Règles de Réponse', 'postal-warmup' ), __( 'Règles de Réponse', 'postal-warmup' ), $cap, 'postal-warmup-reply-rules', [ $this, 'display_reply_rules' ] );
 		add_submenu_page( 'postal-warmup', __( 'Paramètres', 'postal-warmup' ), __( 'Paramètres', 'postal-warmup' ), $cap, 'postal-warmup-settings', [ $this, 'display_settings' ] );
 		add_submenu_page( 'postal-warmup', __( 'Gestion ISP', 'postal-warmup' ), __( 'Gestion ISP', 'postal-warmup' ), $cap, 'postal-warmup-isps', [ $this, 'display_isps' ] );
 		add_submenu_page( 'postal-warmup', __( 'Stratégies', 'postal-warmup' ), __( 'Stratégies', 'postal-warmup' ), $cap, 'postal-warmup-strategies', [ $this, 'display_strategies' ] );
@@ -99,6 +106,8 @@ class Admin {
 	public function display_servers(): void { require_once PW_ADMIN_DIR . 'partials/servers.php'; }
 	public function display_queue(): void { require_once PW_ADMIN_DIR . 'partials/queue.php'; }
 	public function display_templates(): void { require_once PW_ADMIN_DIR . 'partials/templates-v3.1.php'; }
+	public function display_scenarios(): void { require_once PW_ADMIN_DIR . 'partials/scenarios.php'; }
+	public function display_reply_rules(): void { require_once PW_ADMIN_DIR . 'partials/reply-rules.php'; }
 	public function display_stats(): void { require_once PW_ADMIN_DIR . 'partials/stats.php'; }
 	public function display_logs(): void { require_once PW_ADMIN_DIR . 'partials/logs.php'; }
 	public function display_settings(): void { require_once PW_ADMIN_DIR . 'partials/settings.php'; }

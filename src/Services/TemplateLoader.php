@@ -23,7 +23,8 @@ class TemplateLoader {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_templates';
 		
-		$db_template = $wpdb->get_row( $wpdb->prepare( "SELECT id, data, folder_id, status, tags, timezone, default_label FROM $table WHERE name = %s", $name ), ARRAY_A );
+		// Use SELECT * to avoid fatal errors if columns (timezone, default_label) are missing due to failed migration
+		$db_template = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE name = %s", $name ), ARRAY_A );
 		
 		if ( $db_template ) {
 			$data = json_decode( $db_template['data'], true );
@@ -32,8 +33,8 @@ class TemplateLoader {
 				$data['name'] = $name;
 				$data['folder_id'] = (int)$db_template['folder_id'];
 				$data['status'] = $db_template['status'];
-				$data['timezone'] = $db_template['timezone'];
-				$data['default_label'] = $db_template['default_label']; // Crucial for shortcode fallback
+				$data['timezone'] = $db_template['timezone'] ?? '';
+				$data['default_label'] = $db_template['default_label'] ?? ''; // Crucial for shortcode fallback
 
 				if ( ! empty( $db_template['tags'] ) ) {
 					$data['tags'] = explode( ',', $db_template['tags'] );

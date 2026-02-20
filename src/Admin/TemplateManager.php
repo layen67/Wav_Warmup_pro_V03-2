@@ -18,8 +18,12 @@ class TemplateManager {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_templates';
 		
-		// Re-query with data column to satisfy UI needs
-		$templates = $wpdb->get_results( "SELECT id, name, data, folder_id, status, is_favorite, tags, last_used_at, usage_count, timezone, default_label FROM $table ORDER BY name ASC", ARRAY_A );
+		// Use SELECT * to avoid SQL errors if new columns (timezone, default_label) are missing due to failed migration
+		$templates = $wpdb->get_results( "SELECT * FROM $table ORDER BY name ASC", ARRAY_A );
+
+		if ( ! is_array( $templates ) ) {
+			return [];
+		}
 
 		foreach ( $templates as &$tpl ) {
 			// Decode data to count variants
@@ -30,6 +34,10 @@ class TemplateManager {
 				'html'    => count( $data['html'] ?? [] ),
 			];
 
+			// Ensure keys exist if migration failed
+			$tpl['timezone'] = $tpl['timezone'] ?? '';
+			$tpl['default_label'] = $tpl['default_label'] ?? '';
+
 			// Tags handling
 			if ( ! empty( $tpl['tags'] ) && is_string( $tpl['tags'] ) ) {
 				// Check if JSON or CSV
@@ -38,26 +46,12 @@ class TemplateManager {
 					if ( is_array( $decoded ) ) {
 						$tpl['tags'] = $decoded;
 					} else {
-						// Fallback if decode fails but looked like JSON
 						$tpl['tags'] = [];
 					}
 				} else {
 					// CSV
 					$tpl['tags'] = explode( ',', $tpl['tags'] );
 				}
-
-				// Ensure simple array of strings for UI if needed,
-				// but let's check what UI expects. JS usually expects array of objects or strings.
-				// Based on legacy code, it might expect array of strings.
-				// If the review patch suggests wrapping in objects ['name' => $t], let's check that.
-				// The review patch had: $tpl['tags'] = array_map(function($t){ return ['name' => $t]; }, explode(',', $tpl['tags']));
-				// Let's adopt that if it matches the UI expectation.
-				// The mockup/JS usually wants clear structure.
-				// Let's assume simple strings are fine unless specific JS requires objects.
-				// Actually, review patch code:
-				// $tpl['tags'] = array_map(function($t){ return ['name' => $t]; }, ...);
-				// This implies the UI (Tagify or similar) expects objects.
-				// Let's stick to the review patch logic for safety.
 
 				if ( is_array( $tpl['tags'] ) ) {
 					// Normalize to objects if they are strings
@@ -76,7 +70,7 @@ class TemplateManager {
 			}
 		}
 
-		return $templates ?: [];
+		return $templates;
 	}
 
 	public static function get_template( string $name ): ?array {

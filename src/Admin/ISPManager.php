@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Admin;
 
 use WP_Error;
@@ -12,7 +14,7 @@ class ISPManager {
     /**
      * Récupère tous les profils ISP
      */
-    public static function get_all() {
+    public static function get_all(): array {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_isps';
         $table_str = $wpdb->prefix . 'postal_strategies';
@@ -24,6 +26,8 @@ class ISPManager {
             ORDER BY i.isp_label ASC
         ", ARRAY_A );
         
+        if ( ! is_array( $results ) ) return [];
+
         // Decode domains
         foreach ( $results as &$row ) {
             $row['domains'] = json_decode( $row['domains'], true ) ?: [];
@@ -32,7 +36,7 @@ class ISPManager {
         return $results;
     }
 
-    public static function get_by_key( $key ) {
+    public static function get_by_key( string $key ): ?array {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_isps';
         $row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE isp_key = %s", $key ), ARRAY_A );
@@ -40,15 +44,15 @@ class ISPManager {
         if ( $row ) {
             $row['domains'] = json_decode( $row['domains'], true ) ?: [];
         }
-        return $row;
+        return $row ?: null;
     }
 
-    public static function save( $data ) {
+    public static function save( array $data ) {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_isps';
         
         $isp_key = sanitize_title( $data['isp_label'] );
-        if ( empty( $isp_key ) ) return new WP_Error( 'invalid_name', 'Label requis' );
+        if ( empty( $isp_key ) ) return new \WP_Error( 'invalid_name', 'Label requis' );
 
         $domains = array_map( 'sanitize_text_field', explode( ',', $data['domains'] ) );
         $domains = array_filter( array_map( 'trim', $domains ) ); // Remove empty
@@ -79,9 +83,9 @@ class ISPManager {
         }
     }
 
-    public static function delete( $id ) {
+    public static function delete( int $id ): bool {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_isps';
-        return $wpdb->delete( $table, [ 'id' => $id ] );
+        return (bool) $wpdb->delete( $table, [ 'id' => $id ] );
     }
 }

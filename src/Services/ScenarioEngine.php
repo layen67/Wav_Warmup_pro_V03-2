@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Scenario;
+use PostalWarmup\Models\ReplyTemplateRule;
 use PostalWarmup\Models\Database;
 use PostalWarmup\Core\TemplateEngine;
 use PostalWarmup\API\Sender;
@@ -96,11 +97,22 @@ class ScenarioEngine {
 				return $payload;
 			}, 10, 1 );
 
+			// Threading headers
+			$extra_headers = [];
+			if ( ! empty( $conv['thread_id'] ) ) {
+				// If we have a thread ID (initial Message-ID), set it as References/In-Reply-To to maintain thread
+				// Note: Ideally we track the LAST message ID received to reply to IT.
+				// For now, simple threading using the original ID.
+				$extra_headers['In-Reply-To'] = $conv['thread_id'];
+				$extra_headers['References']  = $conv['thread_id'];
+			}
+
 			$result = Sender::send(
 				$conv['contact_email'],
 				$server['domain'],
 				$conv['from_prefix'], // 'support', 'contact', etc.
-				$server
+				$server,
+				$extra_headers
 			);
 
 			// Remove filter to avoid pollution
@@ -113,14 +125,62 @@ class ScenarioEngine {
 		}
 	}
 
-	public static function handle_reply( int $conversation_id, string $body ): void {
+	public static function handle_reply( int $conversation_id, string $body, ?string $message_id = null ): void {
 		$conv = ConversationManager::get_by_id( $conversation_id );
 		if ( ! $conv ) return;
+
+		// Update Thread ID if we have a new Message-ID from the reply
+		if ( $message_id ) {
+			ConversationManager::update_thread_id( $conversation_id, $message_id );
+		}
 
 		// Log the reply
 		ConversationManager::mark_reply_received( $conversation_id, $body );
 
 		// Trigger immediate processing if needed
 		self::process_conversation( ConversationManager::get_by_id( $conversation_id ) );
+	}
+
+	/**
+	 * Process incoming email against Reply Rules (Unsolicited or New Threads)
+	 */
+	public static function process_rules( int $server_id, string $subject, string $body, string $prefix, string $from ): void {
+		// Find matching rule
+		$rule = ReplyTemplateRule::match_rule( $server_id, $subject, $body, $prefix );
+
+		if ( ! $rule ) return;
+
+		Logger::info( "Rule matched for incoming email", [ 'rule' => $rule['name'], 'from' => $from ] );
+
+		// Execute Action: Send Reply (Template)
+		if ( ! empty( $rule['response_template_name'] ) ) {
+			// Create a new conversation to track this interaction?
+			// Or just send a one-off reply?
+			// Ideally create a conversation to allow scenarios to follow up.
+
+			// Create Conversation
+			$scenario_id = (int)( $rule['scenario_id'] ?? 0 );
+			$conv_id = ConversationManager::create_conversation( $from, $server_id, $scenario_id );
+
+			if ( $conv_id ) {
+				// Send the Auto-Reply immediately
+				$server = Database::get_server( $server_id );
+				$tracking_reply_to = Client::get_tracking_reply_to( $server['domain'], $conv_id );
+
+				add_filter( 'pw_email_payload', function( $payload ) use ( $tracking_reply_to ) {
+					$payload['reply_to'] = $tracking_reply_to;
+					return $payload;
+				}, 10, 1 );
+
+				Sender::send( $from, $server['domain'], $prefix, $server );
+
+				remove_all_filters( 'pw_email_payload' );
+
+				// Advance stage if scenario exists
+				if ( $scenario_id ) {
+					ConversationManager::update_stage( $conv_id, 1 );
+				}
+			}
+		}
 	}
 }

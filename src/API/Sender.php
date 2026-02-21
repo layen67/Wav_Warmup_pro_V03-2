@@ -19,7 +19,7 @@ class Sender {
 		add_action( 'pw_send_email_async', array( $this, 'process_queue' ), 10, 6 );
 	}
 
-	public static function send( string $to, string $domain, ?string $prefix = null, ?array $server = null ): array {
+	public static function send( string $to, string $domain, ?string $prefix = null, ?array $server = null, array $extra_headers = [] ): array {
 		if ( ! $server ) {
 			$server = Database::get_server_by_domain( $domain );
 			if ( ! $server ) {
@@ -38,6 +38,7 @@ class Sender {
 				'prefix'      => $prefix,
 				'server_id'   => (int)$server['id'],
 				'retry_count' => 0,
+				'extra_headers' => $extra_headers // Pass threading headers
 			);
 			
 			as_schedule_single_action( time(), 'pw_send_email_async', $args, 'postal-warmup' );
@@ -52,10 +53,10 @@ class Sender {
 		
 		// Fallback synchrone
 		$sender = new self();
-		return $sender->process_queue( $to, $domain, $prefix, (int)$server['id'], 0 );
+		return $sender->process_queue( $to, $domain, $prefix, (int)$server['id'], 0, $extra_headers );
 	}
 
-	public function process_queue( string $to, string $domain, string $prefix, int $server_id, int $retry_count = 0 ): array {
+	public function process_queue( string $to, string $domain, string $prefix, int $server_id, int $retry_count = 0, array $extra_headers = [] ): array {
 		
 		$server = Database::get_server( $server_id );
 		if ( ! $server ) {
@@ -96,8 +97,14 @@ class Sender {
 				'Precedence'        => 'bulk',
 				'Auto-Submitted'    => 'auto-generated',
 				'List-Unsubscribe'  => "<mailto:unsubscribe@$domain?subject=unsubscribe>",
+				'X-Wav-AutoReply'   => '1', // Anti-Loop Custom Header
 			]
 		];
+
+		// Merge extra headers (Threading: In-Reply-To, References)
+		if ( ! empty( $extra_headers ) ) {
+			$payload['headers'] = array_merge( $payload['headers'], $extra_headers );
+		}
 
 		$custom_headers = (string) Settings::get( 'custom_headers', '' );
 		if ( ! empty( $custom_headers ) ) {

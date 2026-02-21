@@ -59,6 +59,7 @@ class ConversationManager {
 			'server_id' => $server_id,
 			'scenario_id' => $scenario_id,
 			'original_message_id' => $initial_message_id,
+			'thread_id' => $initial_message_id, // Initialize thread_id
 			'current_stage' => 0,
 			'loop_cycle' => 0,
 			'status' => 'active',
@@ -120,5 +121,11 @@ class ConversationManager {
 			'pending_reply' => 0,
 			'updated_at' => current_time( 'mysql' )
 		], [ 'id' => $conversation_id ] );
+	}
+
+	public static function update_thread_id( int $conversation_id, string $thread_id ): void {
+		global $wpdb;
+		$table = self::get_table_name();
+		$wpdb->update( $table, [ 'thread_id' => $thread_id ], [ 'id' => $conversation_id ] );
 	}
 }

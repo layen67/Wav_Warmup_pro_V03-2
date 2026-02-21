@@ -99,6 +99,18 @@ class TemplateManager {
 			'updated_at'    => current_time( 'mysql' )
 		];
 
+		// --- ROBUSTNESS FIX: Filter fields based on existing table columns ---
+		// This prevents "Unknown column" errors if migration failed or hasn't run.
+		$existing_columns = $wpdb->get_col( "DESCRIBE $table", 0 );
+		if ( ! empty( $existing_columns ) ) {
+			foreach ( array_keys( $fields ) as $key ) {
+				if ( ! in_array( $key, $existing_columns ) ) {
+					unset( $fields[ $key ] );
+				}
+			}
+		}
+		// ---------------------------------------------------------------------
+
 		// Check ID
 		$id = isset( $meta['id'] ) ? (int) $meta['id'] : 0;
 
@@ -109,7 +121,7 @@ class TemplateManager {
 
 			$updated = $wpdb->update( $table, $fields, [ 'id' => $id ] );
 			if ( $updated === false ) {
-				return new \WP_Error( 'db_error', 'Erreur lors de la mise à jour.' );
+				return new \WP_Error( 'db_error', 'Erreur lors de la mise à jour : ' . $wpdb->last_error );
 			}
 			return $id;
 		} else {
@@ -121,12 +133,18 @@ class TemplateManager {
 			}
 
 			$fields['created_at'] = current_time( 'mysql' );
+
+			// Re-filter created_at if it was added (unlikely to be missing, but for consistency)
+			if ( ! empty( $existing_columns ) && ! in_array( 'created_at', $existing_columns ) ) {
+				unset( $fields['created_at'] );
+			}
+
 			$inserted = $wpdb->insert( $table, $fields );
 
 			if ( $inserted ) {
 				return (int) $wpdb->insert_id;
 			}
-			return new \WP_Error( 'db_error', 'Erreur lors de la création.' );
+			return new \WP_Error( 'db_error', 'Erreur lors de la création : ' . $wpdb->last_error );
 		}
 	}
 
@@ -147,7 +165,7 @@ class TemplateManager {
 		if ( ! $template ) {
 			return new \WP_Error( 'not_found', 'Template source introuvable.' );
 		}
-		
+
 		// Clean data for new entry
 		$data = [
 			'subject'          => $template['subject'] ?? [],
@@ -174,7 +192,7 @@ class TemplateManager {
 	public static function save_category( string $name, int $parent_id, string $color, int $id = 0 ): int {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_template_folders';
-		
+
 		$data = [
 			'name' => $name,
 			'parent_id' => $parent_id > 0 ? $parent_id : null,

@@ -1,116 +1,131 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Admin;
 
 use PostalWarmup\Models\Database;
-use PostalWarmup\Models\Stats;
-use PostalWarmup\Services\Logger;
-use PostalWarmup\Services\Encryption;
-use PostalWarmup\API\Sender;
-use PostalWarmup\API\Client;
+use PostalWarmup\Admin\Settings;
+
+
 
 /**
- * Classe de l'interface d'administration
+ * The admin-specific functionality of the plugin.
  */
 class Admin {
 
-	private $version;
+	private string $version;
 
-	public function __construct( $version ) {
+	public function __construct( string $version ) {
 		$this->version = $version;
 	}
 
-	public function add_admin_menu() {
+	public function enqueue_styles(): void {
+		if ( ! $this->is_plugin_page() ) return;
+
+		wp_enqueue_style( 'postal-warmup-admin', PW_PLUGIN_URL . 'admin/css/admin.css', [], $this->version, 'all' );
+		
+		// Inject dynamic CSS variables from Settings
+		$primary = Settings::get( 'ui_color_primary', '#2271b1' );
+		$success = Settings::get( 'ui_color_success', '#00a32a' );
+		$warning = Settings::get( 'ui_color_warning', '#dba617' );
+		$danger  = Settings::get( 'ui_color_danger', '#d63638' );
+		$dark_mode = Settings::get( 'ui_dark_mode', 'auto' );
+		$density = Settings::get( 'table_density', 'normal' );
+
+		$custom_css = ":root {
+			--pw-primary: $primary;
+			--pw-success: $success;
+			--pw-warning: $warning;
+			--pw-danger: $danger;
+			--pw-density: $density;
+		}";
+
+		if ( $dark_mode === 'always' ) {
+			$custom_css .= " body { background: #1e1e1e; color: #ddd; } .pw-card { background: #2b2b2b; color: #fff; } ";
+		}
+
+		wp_add_inline_style( 'postal-warmup-admin', $custom_css );
+	}
+
+	public function enqueue_scripts(): void {
+		if ( ! $this->is_plugin_page() ) return;
+
+		wp_enqueue_script( 'postal-warmup-admin', PW_PLUGIN_URL . 'admin/js/admin.js', [ 'jquery' ], $this->version, false );
+		
+		// Chart.js for Dashboard
+		if ( isset( $_GET['page'] ) && $_GET['page'] === 'postal-warmup' ) {
+			wp_enqueue_script( 'chart-js', 'https://cdn.jsdelivr.net/npm/chart.js', [], '3.9.1', true );
+		}
+
+		// Templates Manager JS
+		if ( isset( $_GET['page'] ) && $_GET['page'] === 'postal-warmup-templates' ) {
+			wp_enqueue_script( 'postal-warmup-templates', PW_PLUGIN_URL . 'admin/assets/js/templates-manager-v3.1.js', [ 'jquery', 'jquery-ui-draggable', 'jquery-ui-droppable', 'underscore', 'wp-util' ], $this->version, true );
+		}
+
+		// Scenarios Manager JS
+		if ( isset( $_GET['page'] ) && in_array( $_GET['page'], [ 'postal-warmup-scenarios', 'postal-warmup-reply-rules' ] ) ) {
+			wp_enqueue_script( 'postal-warmup-scenarios', PW_PLUGIN_URL . 'admin/assets/js/scenarios-manager.js', [ 'jquery', 'jquery-ui-sortable', 'underscore' ], $this->version, true );
+		}
+
+		wp_localize_script( 'postal-warmup-admin', 'pwAdmin', [
+			'ajaxurl' => admin_url( 'admin-ajax.php' ),
+			'nonce'   => wp_create_nonce( 'pw_admin_nonce' ),
+			'confirm_delete' => __( 'Êtes-vous sûr de vouloir supprimer cet élément ?', 'postal-warmup' ),
+			'refresh_rate' => (int) Settings::get( 'dashboard_refresh', 30 ) * 1000
+		]);
+	}
+
+	public function add_admin_menu(): void {
+		$cap = Settings::get( 'required_capability', 'manage_options' );
+
 		add_menu_page(
 			__( 'Postal Warmup', 'postal-warmup' ),
 			__( 'Postal Warmup', 'postal-warmup' ),
-			'manage_options',
+			$cap,
 			'postal-warmup',
 			[ $this, 'display_dashboard' ],
 			'dashicons-email-alt',
 			26
 		);
-		add_submenu_page( 'postal-warmup', __( 'Tableau de bord', 'postal-warmup' ), __( 'Tableau de bord', 'postal-warmup' ), 'manage_options', 'postal-warmup', [ $this, 'display_dashboard' ] );
-		add_submenu_page( 'postal-warmup', __( 'Serveurs', 'postal-warmup' ), __( 'Serveurs', 'postal-warmup' ), 'manage_options', 'postal-warmup-servers', [ $this, 'display_servers' ] );
-		add_submenu_page( 'postal-warmup', __( 'File d\'attente', 'postal-warmup' ), __( 'File d\'attente', 'postal-warmup' ), 'manage_options', 'postal-warmup-queue', [ $this, 'display_queue' ] );
-		add_submenu_page( 'postal-warmup', __( 'Templates', 'postal-warmup' ), __( 'Templates', 'postal-warmup' ), 'manage_options', 'postal-warmup-templates', [ $this, 'display_templates' ] );
-		add_submenu_page( 'postal-warmup', __( 'Statistiques', 'postal-warmup' ), __( 'Statistiques', 'postal-warmup' ), 'manage_options', 'postal-warmup-stats', [ $this, 'display_stats' ] );
-		add_submenu_page( 'postal-warmup', __( 'Logs', 'postal-warmup' ), __( 'Logs', 'postal-warmup' ), 'manage_options', 'postal-warmup-logs', [ $this, 'display_logs' ] );
-		add_submenu_page( 'postal-warmup', __( 'Paramètres', 'postal-warmup' ), __( 'Paramètres', 'postal-warmup' ), 'manage_options', 'postal-warmup-settings', [ $this, 'display_settings' ] );
-		add_submenu_page( 'postal-warmup', __( 'Gestion ISP', 'postal-warmup' ), __( 'Gestion ISP', 'postal-warmup' ), 'manage_options', 'postal-warmup-isps', [ $this, 'display_isps' ] );
-		add_submenu_page( 'postal-warmup', __( 'Stratégies', 'postal-warmup' ), __( 'Stratégies', 'postal-warmup' ), 'manage_options', 'postal-warmup-strategies', [ $this, 'display_strategies' ] );
+
+		add_submenu_page( 'postal-warmup', __( 'Tableau de bord', 'postal-warmup' ), __( 'Tableau de bord', 'postal-warmup' ), $cap, 'postal-warmup', [ $this, 'display_dashboard' ] );
+		add_submenu_page( 'postal-warmup', __( 'Serveurs', 'postal-warmup' ), __( 'Serveurs', 'postal-warmup' ), $cap, 'postal-warmup-servers', [ $this, 'display_servers' ] );
+		add_submenu_page( 'postal-warmup', __( 'File d\'attente', 'postal-warmup' ), __( 'File d\'attente', 'postal-warmup' ), $cap, 'postal-warmup-queue', [ $this, 'display_queue' ] );
+		add_submenu_page( 'postal-warmup', __( 'Templates', 'postal-warmup' ), __( 'Templates', 'postal-warmup' ), $cap, 'postal-warmup-templates', [ $this, 'display_templates' ] );
+		add_submenu_page( 'postal-warmup', __( 'Statistiques', 'postal-warmup' ), __( 'Statistiques', 'postal-warmup' ), $cap, 'postal-warmup-stats', [ $this, 'display_stats' ] );
+		add_submenu_page( 'postal-warmup', __( 'Logs', 'postal-warmup' ), __( 'Logs', 'postal-warmup' ), $cap, 'postal-warmup-logs', [ $this, 'display_logs' ] );
+		add_submenu_page( 'postal-warmup', __( 'Scénarios', 'postal-warmup' ), __( 'Scénarios', 'postal-warmup' ), $cap, 'postal-warmup-scenarios', [ $this, 'display_scenarios' ] );
+		add_submenu_page( 'postal-warmup', __( 'Règles de Réponse', 'postal-warmup' ), __( 'Règles de Réponse', 'postal-warmup' ), $cap, 'postal-warmup-reply-rules', [ $this, 'display_reply_rules' ] );
+		add_submenu_page( 'postal-warmup', __( 'Paramètres', 'postal-warmup' ), __( 'Paramètres', 'postal-warmup' ), $cap, 'postal-warmup-settings', [ $this, 'display_settings' ] );
+		add_submenu_page( 'postal-warmup', __( 'Gestion ISP', 'postal-warmup' ), __( 'Gestion ISP', 'postal-warmup' ), $cap, 'postal-warmup-isps', [ $this, 'display_isps' ] );
+		add_submenu_page( 'postal-warmup', __( 'Stratégies', 'postal-warmup' ), __( 'Stratégies', 'postal-warmup' ), $cap, 'postal-warmup-strategies', [ $this, 'display_strategies' ] );
 	}
 
-	public function enqueue_styles( $hook ) {
-		if ( strpos( $hook, 'postal-warmup' ) === false ) return;
-		
-		$is_dev = defined('WP_DEBUG') && WP_DEBUG === true;
-		$script_version = $is_dev ? time() : WARMUP_PRO_VERSION;
+	public function display_dashboard(): void { require_once PW_ADMIN_DIR . 'partials/dashboard.php'; }
+	public function display_servers(): void { require_once PW_ADMIN_DIR . 'partials/servers.php'; }
+	public function display_queue(): void { require_once PW_ADMIN_DIR . 'partials/queue.php'; }
+	public function display_templates(): void { require_once PW_ADMIN_DIR . 'partials/templates-v3.1.php'; }
+	public function display_scenarios(): void { require_once PW_ADMIN_DIR . 'partials/scenarios.php'; }
+	public function display_reply_rules(): void { require_once PW_ADMIN_DIR . 'partials/reply-rules.php'; }
+	public function display_stats(): void { require_once PW_ADMIN_DIR . 'partials/stats.php'; }
+	public function display_logs(): void { require_once PW_ADMIN_DIR . 'partials/logs.php'; }
+	public function display_settings(): void { require_once PW_ADMIN_DIR . 'partials/settings.php'; }
+	public function display_isps(): void { require_once PW_ADMIN_DIR . 'partials/isps.php'; }
+	public function display_strategies(): void { require_once PW_ADMIN_DIR . 'partials/strategies.php'; }
 
-		wp_enqueue_style( 'pw-admin', PW_PLUGIN_URL . 'admin/assets/css/admin.css', [], $script_version );
-		if ( strpos( $hook, 'postal-warmup-templates' ) !== false || $hook === 'toplevel_page_postal-warmup' ) {
-			wp_enqueue_style( 'pw-templates', PW_PLUGIN_URL . 'admin/assets/css/templates.css', [ 'pw-admin' ], $script_version );
-		}
-	}
-
-	public function enqueue_scripts( $hook ) {
-		if ( strpos( $hook, 'postal-warmup' ) === false ) return;
-		
-		$is_dev = defined('WP_DEBUG') && WP_DEBUG === true;
-		$script_version = $is_dev ? time() : WARMUP_PRO_VERSION;
-
-		// Utilisation locale de Chart.js si possible (Voir Roadmap Phase 1)
-		if ( file_exists( PW_PLUGIN_DIR . 'admin/assets/js/chart.umd.min.js' ) ) {
-			wp_enqueue_script( 'pw-chartjs', PW_PLUGIN_URL . 'admin/assets/js/chart.umd.min.js', [], '4.4.0', true );
-		} else {
-			wp_enqueue_script( 'pw-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js', [], '4.4.0', true );
-		}
-
-		if ( strpos( $hook, 'postal-warmup-stats' ) !== false ) {
-			wp_enqueue_script( 'pw-jspdf', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', [], '2.5.1', true );
-			wp_enqueue_script( 'pw-html2canvas', 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', [], '1.4.1', true );
-		}
-		
-		wp_enqueue_script( 'pw-admin', PW_PLUGIN_URL . 'admin/assets/js/admin.js', [ 'jquery', 'pw-chartjs' ], $script_version, true );
-		
-		if ( strpos( $hook, 'postal-warmup-templates' ) !== false || $hook === 'toplevel_page_postal-warmup' ) {
-			wp_enqueue_script( 'pw-templates', PW_PLUGIN_URL . 'admin/assets/js/templates-manager.js', [ 'jquery', 'pw-admin' ], $script_version, true );
-		}
-
-		if ( strpos( $hook, 'postal-warmup-strategies' ) !== false ) {
-			wp_enqueue_script( 'pw-strategies', PW_PLUGIN_URL . 'admin/assets/js/strategies.js', [ 'jquery', 'pw-chartjs', 'pw-admin' ], $script_version, true );
-		}
-
-		$uncategorized_id = TemplateManager::ensure_uncategorized_folder();
-
-		wp_localize_script( 'pw-admin', 'pwAdmin', [
-			'ajaxurl' => admin_url( 'admin-ajax.php' ),
-			'nonce'   => wp_create_nonce( 'pw_admin_nonce' ),
-			'uncategorized_id' => $uncategorized_id,
-			'i18n'    => [
-				'confirm_delete' => __( 'Êtes-vous sûr de vouloir supprimer cet élément ?', 'postal-warmup' ),
-				'testing'        => __( 'Test en cours...', 'postal-warmup' ),
-				'success'        => __( 'Succès !', 'postal-warmup' ),
-				'error'          => __( 'Erreur !', 'postal-warmup' ),
-			]
-		]);
-	}
-
-	// Views
-	public function display_dashboard() { require_once PW_ADMIN_DIR . 'partials/dashboard.php'; }
-	public function display_servers() { require_once PW_ADMIN_DIR . 'partials/servers.php'; }
-	public function display_queue() { require_once PW_ADMIN_DIR . 'partials/queue.php'; }
-	public function display_templates() { require_once PW_ADMIN_DIR . 'partials/templates.php'; }
-	public function display_stats() { require_once PW_ADMIN_DIR . 'partials/stats.php'; }
-	public function display_logs() { require_once PW_ADMIN_DIR . 'partials/logs.php'; }
-	public function display_settings() { require_once PW_ADMIN_DIR . 'partials/settings.php'; }
-	public function display_isps() { require_once PW_ADMIN_DIR . 'partials/isps.php'; }
-	public function display_strategies() { require_once PW_ADMIN_DIR . 'partials/strategies.php'; }
-
-	public function display_admin_notices() {
+	public function display_admin_notices(): void {
 		if ( get_transient( 'pw_activation_notice' ) ) {
-			echo '<div class="notice notice-success is-dismissible"><p><strong>Postal Warmup Pro activé !</strong> Ajoutez vos serveurs.</p></div>';
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p><?php _e( 'Postal Warmup Pro activé avec succès. Pensez à configurer vos serveurs.', 'postal-warmup' ); ?></p>
+			</div>
+			<?php
 			delete_transient( 'pw_activation_notice' );
 		}
+	}
+
+	private function is_plugin_page(): bool {
+		return isset( $_GET['page'] ) && strpos( $_GET['page'], 'postal-warmup' ) !== false;
 	}
 }

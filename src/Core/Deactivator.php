@@ -1,4 +1,7 @@
 <?php
+// src/Core/Deactivator.php
+
+declare(strict_types=1);
 
 namespace PostalWarmup\Core;
 
@@ -7,9 +10,29 @@ namespace PostalWarmup\Core;
  */
 class Deactivator {
 
-	public static function deactivate() {
-		wp_clear_scheduled_hook( 'pw_cleanup_old_logs' );
-		wp_clear_scheduled_hook( 'pw_cleanup_old_stats' );
-		wp_clear_scheduled_hook( 'pw_daily_report' );
+	public static function deactivate(): void {
+		self::unschedule_cron_jobs();
+		flush_rewrite_rules();
+	}
+
+	private static function unschedule_cron_jobs(): void {
+		$crons = [
+			'pw_process_queue',
+			'pw_warmup_daily_increment',
+			'pw_daily_report',
+			'pw_cleanup_old_logs',
+			'pw_cleanup_old_stats',
+			'pw_daily_stats_aggregation',
+			'pw_cleanup_queue',
+			'pw_advisor_check',
+			'pw_scenario_daily_check'
+		];
+
+		foreach ( $crons as $cron ) {
+			$timestamp = wp_next_scheduled( $cron );
+			if ( $timestamp ) {
+				wp_unschedule_event( $timestamp, $cron );
+			}
+		}
 	}
 }

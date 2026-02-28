@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Admin;
 
 use PostalWarmup\Models\Strategy;
@@ -7,11 +9,11 @@ use PostalWarmup\Services\StrategyEngine;
 
 class StrategyManager {
 
-    public static function get_all() {
+    public static function get_all(): array {
         return Strategy::get_all();
     }
 
-    public static function save( $data ) {
+    public static function save( array $data ): int {
         // Sanitize and structure config
         $config = [
             'start_volume' => absint( $data['start_volume'] ),
@@ -25,21 +27,21 @@ class StrategyManager {
         ];
 
         return Strategy::save([
-            'id' => $data['id'] ?? null,
+            'id' => isset( $data['id'] ) ? (int)$data['id'] : null,
             'name' => $data['name'],
             'description' => $data['description'],
             'config' => $config
         ]);
     }
 
-    public static function delete( $id ) {
+    public static function delete( int $id ): bool {
         return Strategy::delete( $id );
     }
 
     /**
      * Génère les données de prévisualisation du graphique
      */
-    public static function get_preview_data( $config ) {
+    public static function get_preview_data( array $config ): array {
         $data = [];
         $days = 30; // Preview 30 days
         $strategy = [ 'config' => $config ]; // Mock strategy object

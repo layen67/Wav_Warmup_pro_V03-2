@@ -1,110 +1,176 @@
 <?php
-if ( ! defined( 'ABSPATH' ) ) exit;
-use PostalWarmup\Models\Strategy;
+/**
+ * Vue de Gestion des Stratégies
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+use PostalWarmup\Admin\StrategyManager;
+
+// Handle Form Submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_admin_referer('pw_save_strategy')) {
+    $result = StrategyManager::save($_POST);
+    if (is_wp_error($result)) {
+        echo '<div class="notice notice-error"><p>' . $result->get_error_message() . '</p></div>';
+    } else {
+        echo '<div class="notice notice-success"><p>Stratégie sauvegardée.</p></div>';
+    }
+}
+
+// Handle Delete
+if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
+    if (check_admin_referer('pw_delete_strategy_' . $_GET['id'])) {
+        StrategyManager::delete((int)$_GET['id']);
+        echo '<div class="notice notice-success"><p>Stratégie supprimée.</p></div>';
+    }
+}
+
+$strategies = StrategyManager::get_all();
+$edit_id = isset($_GET['id']) && (!isset($_GET['action']) || $_GET['action'] === 'edit') ? (int)$_GET['id'] : 0;
+$edit_strat = $edit_id ? StrategyManager::get($edit_id) : [];
+$config = $edit_strat['config'] ?? [
+    'start_volume' => 10,
+    'growth_type' => 'linear',
+    'growth_value' => 5,
+    'max_volume' => 500,
+    'safety_rules' => [
+        'max_hard_bounce' => 5,
+        'max_complaint' => 0.1
+    ]
+];
 ?>
 
-<div class="wrap">
-    <h1 class="wp-heading-inline">Stratégies de Warmup</h1>
-    <button class="page-title-action" id="pw-add-strategy-btn">Créer une Stratégie</button>
-    <hr class="wp-header-end">
+<div class="wrap pw-dashboard">
+    <div class="pw-header">
+        <h1>
+            <span class="dashicons dashicons-chart-line"></span>
+            <?php _e('Stratégies de Montée en Charge', 'postal-warmup'); ?>
+        </h1>
+    </div>
 
-    <table class="wp-list-table widefat fixed striped">
-        <thead>
-            <tr>
-                <th>Nom</th>
-                <th>Type de Croissance</th>
-                <th>Volume Départ</th>
-                <th>Volume Max</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody id="pw-strategy-list">
-            <?php 
-            $strategies = Strategy::get_all();
-            if ( empty( $strategies ) ): ?>
-                <tr><td colspan="5">Aucune stratégie configurée.</td></tr>
-            <?php else: foreach ( $strategies as $s ): 
-                $conf = $s['config'];
-            ?>
-                <tr data-id="<?php echo esc_attr($s['id']); ?>" data-json="<?php echo esc_attr(json_encode($s)); ?>">
-                    <td><strong><?php echo esc_html($s['name']); ?></strong><br><small><?php echo esc_html($s['description']); ?></small></td>
-                    <td><?php echo esc_html(ucfirst($conf['growth_type'])); ?> (<?php echo $conf['growth_value']; ?>)</td>
-                    <td><?php echo esc_html($conf['start_volume']); ?></td>
-                    <td><?php echo esc_html($conf['max_volume']); ?></td>
-                    <td>
-                        <button class="button pw-edit-strategy">Éditer</button>
-                        <button class="button pw-delete-strategy" style="color: #b32d2e; border-color: #b32d2e;">Supprimer</button>
-                    </td>
-                </tr>
-            <?php endforeach; endif; ?>
-        </tbody>
-    </table>
-</div>
+    <div class="pw-layout-container" style="display:grid; grid-template-columns: 1fr 2fr; gap: 20px;">
 
-<!-- Modal Stratégie -->
-<div id="pw-strategy-modal" class="pw-modal" style="display:none;">
-    <div class="pw-modal-content pw-modal-lg" style="width: 800px;">
-        <div class="pw-modal-header">
-            <h2 id="pw-strategy-modal-title">Configurer la Stratégie</h2>
-            <button class="pw-modal-close">&times;</button>
-        </div>
-        <div class="pw-modal-body" style="display:flex; gap:20px;">
-            <div style="flex:1;">
-                <form id="pw-strategy-form">
-                    <input type="hidden" name="id" id="pw-st-id">
-                    
+        <!-- Form -->
+        <div class="pw-card">
+            <div class="pw-card-header">
+                <h3><?php echo $edit_id ? 'Modifier Stratégie' : 'Nouvelle Stratégie'; ?></h3>
+            </div>
+            <div class="pw-card-body">
+                <form method="post" action="?page=postal-warmup-strategies">
+                    <?php wp_nonce_field('pw_save_strategy'); ?>
+                    <input type="hidden" name="id" value="<?php echo $edit_id; ?>">
+
                     <div class="pw-form-group">
-                        <label>Nom de la Stratégie</label>
-                        <input type="text" name="name" id="pw-st-name" class="widefat" required>
+                        <label>Nom</label>
+                        <input type="text" name="name" value="<?php echo esc_attr($edit_strat['name'] ?? ''); ?>" required class="widefat">
                     </div>
-                    
+
                     <div class="pw-form-group">
                         <label>Description</label>
-                        <textarea name="description" id="pw-st-desc" class="widefat" rows="2"></textarea>
+                        <textarea name="description" rows="3" class="widefat"><?php echo esc_textarea($edit_strat['description'] ?? ''); ?></textarea>
                     </div>
 
-                    <div style="display:flex; gap:10px;">
-                        <div style="flex:1;">
-                            <label>Volume Départ</label>
-                            <input type="number" name="start_volume" id="pw-st-start" class="widefat" value="10">
-                        </div>
-                        <div style="flex:1;">
-                            <label>Volume Max</label>
-                            <input type="number" name="max_volume" id="pw-st-max" class="widefat" value="5000">
-                        </div>
+                    <hr>
+
+                    <h4>Configuration de Montée</h4>
+                    <div class="pw-form-group">
+                        <label>Volume de Départ</label>
+                        <input type="number" name="config[start_volume]" value="<?php echo (int)$config['start_volume']; ?>" class="small-text">
                     </div>
 
-                    <div class="pw-form-group" style="margin-top:10px;">
+                    <div class="pw-form-group">
                         <label>Type de Croissance</label>
-                        <select name="growth_type" id="pw-st-type" class="widefat">
-                            <option value="linear">Linéaire (+X par jour)</option>
-                            <option value="exponential">Exponentielle (+X % par jour)</option>
-                            <option value="mixed">Mixte (Optimisé J1-J20)</option>
+                        <select name="config[growth_type]" class="widefat">
+                            <option value="linear" <?php selected($config['growth_type'], 'linear'); ?>>Linéaire (+X par jour)</option>
+                            <option value="exponential" <?php selected($config['growth_type'], 'exponential'); ?>>Exponentielle (+X% par jour)</option>
+                            <option value="mixed" <?php selected($config['growth_type'], 'mixed'); ?>>Mixte (Linéaire puis Exponentielle)</option>
                         </select>
                     </div>
 
                     <div class="pw-form-group">
                         <label>Valeur de Croissance (X)</label>
-                        <input type="number" step="0.1" name="growth_value" id="pw-st-value" class="widefat" value="10">
-                        <p class="description">Ex: 10 pour +10 emails, ou 30 pour +30%</p>
+                        <input type="number" name="config[growth_value]" value="<?php echo (float)$config['growth_value']; ?>" step="0.1" class="small-text">
+                        <p class="description">Si Linéaire: nombre d'emails. Si Exponentielle: pourcentage (ex: 20 pour 20%).</p>
                     </div>
-                    
-                    <h3 style="margin-top:20px; border-bottom:1px solid #eee;">Sécurité (Automatique)</h3>
+
                     <div class="pw-form-group">
-                        <label>Arrêt si Hard Bounce > (%)</label>
-                        <input type="number" step="0.1" name="safety_max_hard_bounce" id="pw-st-bounce" class="widefat" value="2.0">
+                        <label>Volume Maximum</label>
+                        <input type="number" name="config[max_volume]" value="<?php echo (int)$config['max_volume']; ?>" class="small-text">
+                    </div>
+
+                    <hr>
+
+                    <h4>Sécurité (Pauses)</h4>
+                    <div class="pw-form-group">
+                        <label>Max Hard Bounce (%)</label>
+                        <input type="number" name="config[safety_rules][max_hard_bounce]" value="<?php echo (float)$config['safety_rules']['max_hard_bounce']; ?>" step="0.1" class="small-text">
+                    </div>
+                    <div class="pw-form-group">
+                        <label>Max Plaintes (%)</label>
+                        <input type="number" name="config[safety_rules][max_complaint]" value="<?php echo (float)$config['safety_rules']['max_complaint']; ?>" step="0.01" class="small-text">
+                    </div>
+
+                    <div class="pw-actions">
+                        <button type="submit" class="button button-primary">Enregistrer</button>
+                        <?php if ($edit_id): ?>
+                            <a href="?page=postal-warmup-strategies" class="button">Annuler</a>
+                        <?php endif; ?>
                     </div>
                 </form>
             </div>
-            
-            <div style="flex:1; background:#f9f9f9; padding:15px; border-radius:5px;">
-                <h3>Prévisualisation</h3>
-                <canvas id="pw-strategy-chart" width="400" height="300"></canvas>
+        </div>
+
+        <!-- List -->
+        <div class="pw-card">
+            <div class="pw-card-header">
+                <h3>Stratégies Disponibles</h3>
+            </div>
+            <div class="pw-card-body" style="padding:0;">
+                <table class="pw-table">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            <th>Type</th>
+                            <th>Départ -> Max</th>
+                            <th>Règles Sécu</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($strategies as $strat):
+                            $conf = $strat['config'];
+                        ?>
+                        <tr>
+                            <td>
+                                <strong><?php echo esc_html($strat['name']); ?></strong><br>
+                                <span class="description"><?php echo esc_html($strat['description']); ?></span>
+                            </td>
+                            <td><?php echo $conf['growth_type']; ?></td>
+                            <td><?php echo "{$conf['start_volume']} -> {$conf['max_volume']}"; ?></td>
+                            <td>
+                                <span class="pw-badge pw-badge-warning">Bounce > <?php echo $conf['safety_rules']['max_hard_bounce']; ?>%</span>
+                            </td>
+                            <td>
+                                <div class="pw-cell-actions">
+                                    <a href="?page=postal-warmup-strategies&action=edit&id=<?php echo $strat['id']; ?>" class="button button-small">
+                                        <span class="dashicons dashicons-edit"></span>
+                                    </a>
+                                    <a href="<?php echo wp_nonce_url('?page=postal-warmup-strategies&action=delete&id=' . $strat['id'], 'pw_delete_strategy_' . $strat['id']); ?>"
+                                       class="button button-small"
+                                       onclick="return confirm('Supprimer cette stratégie ?');"
+                                       style="color: #d63638;">
+                                        <span class="dashicons dashicons-trash"></span>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
         </div>
-        <div class="pw-modal-footer">
-            <button class="button button-secondary pw-modal-close">Annuler</button>
-            <button class="button button-primary" id="pw-save-strategy">Enregistrer</button>
-        </div>
+
     </div>
 </div>

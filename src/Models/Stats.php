@@ -1,16 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Models;
 
 use PostalWarmup\Models\Database;
+use PostalWarmup\Services\WarmupEngine;
+use PostalWarmup\Admin\Settings;
+
+
 
 class Stats {
 
-	/**
-	 * Récupère le nombre d'emails envoyés aujourd'hui par un serveur.
-	 * Utilisé pour le Load Balancer.
-	 */
-	public static function get_server_daily_usage( int $server_id ) {
+	public static function get_server_daily_usage( int $server_id ): int {
 		global $wpdb;
 		$stats_table = $wpdb->prefix . 'postal_stats';
 		$date = current_time( 'Y-m-d' );
@@ -22,7 +24,7 @@ class Stats {
 		) );
 	}
 
-	public static function get_server_hourly_usage( int $server_id ) {
+	public static function get_server_hourly_usage( int $server_id ): int {
 		global $wpdb;
 		$stats_table = $wpdb->prefix . 'postal_stats';
 		$date = current_time( 'Y-m-d' );
@@ -36,9 +38,8 @@ class Stats {
 		) );
 	}
 
-	public static function get_isp_daily_usage( string $isp ) {
+	public static function get_isp_daily_usage( string $isp ): int {
 		global $wpdb;
-		// Check postal_queue which has 'isp' column and status='sent'/'processing'
 		$queue_table = $wpdb->prefix . 'postal_queue';
 		$date_start = current_time( 'Y-m-d 00:00:00' );
 		
@@ -49,7 +50,7 @@ class Stats {
 		) );
 	}
 
-    public static function get_isp_hourly_usage( string $isp ) {
+    public static function get_isp_hourly_usage( string $isp ): int {
         global $wpdb;
         $queue_table = $wpdb->prefix . 'postal_queue';
         $hour_start = current_time( 'Y-m-d H:00:00' );
@@ -61,13 +62,12 @@ class Stats {
         ) );
     }
 
-	public static function get_server_isp_daily_usage( int $server_id, string $isp ) {
-		// New V3 Logic: Use dedicated tracking table for speed and persistence
+	public static function get_server_isp_daily_usage( int $server_id, string $isp ): int {
 		$stats = self::get_server_isp_stats( $server_id, $isp );
 		return $stats ? (int) $stats->sent_today : 0;
 	}
 
-	public static function get_server_isp_stats( int $server_id, string $isp_key ) {
+	public static function get_server_isp_stats( int $server_id, string $isp_key ): ?object {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_server_isp_stats';
 		
@@ -78,16 +78,19 @@ class Stats {
 		) );
 		
 		if ( ! $row ) {
-			// Initialize if missing
+			// Initialize if missing: Use global server warmup day to prevent regression
+			$server_day = $wpdb->get_var( $wpdb->prepare( "SELECT warmup_day FROM {$wpdb->prefix}postal_servers WHERE id = %d", $server_id ) );
+			$init_day = $server_day ? (int)$server_day : 1;
+
 			$wpdb->insert( $table, [
 				'server_id' => $server_id,
 				'isp_key' => $isp_key,
-				'warmup_day' => 1,
+				'warmup_day' => $init_day,
 				'sent_today' => 0,
 				'score' => 100
 			] );
 			return (object) [
-				'warmup_day' => 1,
+				'warmup_day' => $init_day,
 				'sent_today' => 0,
 				'score' => 100,
 				'fails_today' => 0
@@ -97,7 +100,7 @@ class Stats {
 		return $row;
 	}
 
-	public static function increment_server_isp_usage( int $server_id, string $isp_key, $success = true ) {
+	public static function increment_server_isp_usage( int $server_id, string $isp_key, bool $success = true ): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_server_isp_stats';
 		
@@ -109,7 +112,6 @@ class Stats {
 			$sql .= ", delivered_today = delivered_today + 1";
 		} else {
 			$sql .= ", fails_today = fails_today + 1";
-			// Penalize score on failure
 			$sql .= ", score = GREATEST(0, score - 5)";
 		}
 		$sql .= " WHERE server_id = %d AND isp_key = %s";
@@ -117,28 +119,30 @@ class Stats {
 		$wpdb->query( $wpdb->prepare( $sql, $server_id, $isp_key ) );
 	}
 
-	public static function get_dynamic_limit( $server ) {
-		$limit = (int) $server['daily_limit'];
+	public static function get_dynamic_limit( array $server ): int {
+		$limit = (int) ($server['daily_limit'] ?? 0);
 		
 		if ( $limit <= 0 ) {
 			$settings = get_option('pw_warmup_settings', []);
-			$start_vol = isset($settings['start_volume']) ? (int)$settings['start_volume'] : 10;
-			$growth = isset($settings['growth_rate']) ? (int)$settings['growth_rate'] : 20;
+
+			$start_vol = isset($settings['warmup_start']) ? (int)$settings['warmup_start'] : 10;
+			if (isset($settings['start_volume'])) $start_vol = (int)$settings['start_volume'];
+
+			$growth = isset($settings['warmup_increase_percent']) ? (int)$settings['warmup_increase_percent'] : 20;
+			if (isset($settings['growth_rate'])) $growth = (int)$settings['growth_rate'];
 			
 			$day = isset($server['warmup_day']) ? (int)$server['warmup_day'] : 1;
 			if ($day < 1) $day = 1;
 
-			// Limit = Start * (1 + Growth/100)^(Day-1)
-			$limit = floor( $start_vol * pow( 1 + ($growth / 100), $day - 1 ) );
+			$limit = (int) floor( $start_vol * pow( 1 + ($growth / 100), $day - 1 ) );
 		}
 		
 		return $limit;
 	}
 
-	public static function get_dashboard_stats() {
-		// Try cache first
+	public static function get_dashboard_stats(): array {
 		$cached = get_transient( 'pw_dashboard_stats' );
-		if ( $cached !== false ) return $cached;
+		if ( $cached !== false ) return (array) $cached;
 
 		global $wpdb;
 		$servers_table = $wpdb->prefix . 'postal_servers';
@@ -147,28 +151,24 @@ class Stats {
 		$today = current_time( 'Y-m-d' );
 		$yesterday = date( 'Y-m-d', strtotime( '-1 day', current_time( 'timestamp' ) ) );
 		
-		// General stats from servers table (cumulative)
 		$general = $wpdb->get_row( "SELECT COUNT(*) as total_servers, SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END) as active_servers FROM $servers_table", ARRAY_A );
 		
-		// === Optimisation : Utilisation de la table d'agrégation journalière si disponible ===
+		if ( ! $general ) {
+			$general = [ 'total_servers' => 0, 'active_servers' => 0 ];
+		}
+
 		$daily_table = $wpdb->prefix . 'postal_stats_daily';
 		
-		// Total Sent (Historical + Today)
-		// On prend le total de l'historique archivé + le total du jour (pas encore archivé)
 		$history_total = (int) $wpdb->get_var( "SELECT SUM(total_sent) FROM $daily_table" );
 		$today_total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT SUM(sent_count) FROM $stats_table WHERE date = %s", $today ) );
 		$total_sent = $history_total + $today_total;
 
-		// Total Success
 		$history_success = (int) $wpdb->get_var( "SELECT SUM(total_success) FROM $daily_table" );
 		$today_success = (int) $wpdb->get_var( $wpdb->prepare( "SELECT SUM(success_count) FROM $stats_table WHERE date = %s", $today ) );
 		$total_success = $history_success + $today_success;
 
-		// Yesterday (Utilise la table daily si l'agrégation a tourné, sinon fallback stats_table)
-		// Si le CRON a tourné, hier est dans daily_table
 		$sent_yesterday = (int) $wpdb->get_var( $wpdb->prepare( "SELECT SUM(total_sent) FROM $daily_table WHERE date = %s", $yesterday ) );
 		if ( $sent_yesterday === 0 ) {
-			// Fallback si pas encore agrégé
 			$sent_yesterday = (int) $wpdb->get_var( $wpdb->prepare( "SELECT SUM(sent_count) FROM $stats_table WHERE date = %s", $yesterday ) );
 		}
 		
@@ -188,7 +188,7 @@ class Stats {
 		
 		$results = [
 			'total_sent'     => $total_sent,
-			'total_success'  => (int) ( $general['total_success'] ?? 0 ),
+			'total_success'  => $total_success,
 			'success_rate'   => $success_rate,
 			'total_servers'  => (int) ( $general['total_servers'] ?? 0 ),
 			'active_servers' => (int) ( $general['active_servers'] ?? 0 ),
@@ -196,11 +196,11 @@ class Stats {
 			'evolution'      => $evolution
 		];
 
-		set_transient( 'pw_dashboard_stats', $results, 1 * MINUTE_IN_SECONDS );
+		set_transient( 'pw_dashboard_stats', $results, 60 );
 		return $results;
 	}
 
-	public static function get_recent_errors( $limit = 5 ) {
+	public static function get_recent_errors( int $limit = 5 ): array {
 		global $wpdb;
 		$logs_table = $wpdb->prefix . 'postal_logs';
 		$servers_table = $wpdb->prefix . 'postal_servers';
@@ -216,8 +216,7 @@ class Stats {
 		), ARRAY_A ) ?: [];
 	}
 
-	public static function get_servers_stats() {
-		// Reuse Database model but ensuring rate calculation
+	public static function get_servers_stats(): array {
 		$servers = Database::get_servers();
 		$stats = [];
 		foreach ( $servers as $server ) {
@@ -226,25 +225,54 @@ class Stats {
 				$rate = round( ( $server['success_count'] / $server['sent_count'] ) * 100, 1 );
 			}
 			$server['success_rate'] = $rate;
+
+			$server['quota'] = self::get_dynamic_limit($server);
+			$server['ip'] = self::get_server_ip($server['domain']);
+
 			$stats[] = $server;
 		}
 		return $stats;
 	}
+
+	private static function get_server_ip( string $domain ): ?string {
+		$cache_key = 'pw_server_ip_' . md5( $domain );
+		$ip = get_transient( $cache_key );
+
+		if ( false === $ip ) {
+			$ip = gethostbyname( $domain );
+			if ( $ip === $domain ) {
+				$ip = null;
+			}
+			set_transient( $cache_key, $ip, 24 * 3600 );
+		}
+
+		return $ip ? (string)$ip : null;
+	}
 	
-	public static function get_activity_24h() {
-		// Logic to return chart data for dashboard
+	public static function get_activity_24h(): array {
 		global $wpdb;
 		$stats_table = $wpdb->prefix . 'postal_stats';
+		$daily_table = $wpdb->prefix . 'postal_stats_daily';
 		$date_limit = date( 'Y-m-d', strtotime( '-7 days' ) );
+		$today = current_time( 'Y-m-d' );
 		
-		$results = $wpdb->get_results( $wpdb->prepare(
-			"SELECT date, SUM(sent_count) as total_sent, SUM(success_count) as total_success, SUM(error_count) as total_errors
-			FROM $stats_table 
-			WHERE date >= %s 
-			GROUP BY date 
-			ORDER BY date ASC",
-			$date_limit
-		), ARRAY_A );
+		$sql_past = "
+			SELECT date, SUM(total_sent) as total_sent, SUM(total_success) as total_success, SUM(total_error) as total_errors
+			FROM $daily_table
+			WHERE date >= %s AND date < %s
+			GROUP BY date
+		";
+
+		$sql_today = "
+			SELECT date, SUM(sent_count) as total_sent, SUM(success_count) as total_success, SUM(error_count) as total_errors
+			FROM $stats_table
+			WHERE date = %s
+			GROUP BY date
+		";
+
+		$sql = "($sql_past) UNION ALL ($sql_today) ORDER BY date ASC";
+
+		$results = $wpdb->get_results( $wpdb->prepare( $sql, $date_limit, $today, $today ), ARRAY_A );
 		
 		return [
 			'labels' => array_column( $results, 'date' ),
@@ -252,18 +280,17 @@ class Stats {
 		];
 	}
 
-	public static function get_detailed_metrics( $days = 7 ) {
+	public static function get_detailed_metrics( int $days = 7 ): array {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_metrics';
 		$date_from = date( 'Y-m-d', strtotime( "-$days days" ) );
 		return $wpdb->get_results( $wpdb->prepare( "SELECT event_type, SUM(count) as total FROM $table WHERE date >= %s GROUP BY event_type", $date_from ), ARRAY_A ) ?: [];
 	}
 
-	public static function get_overall_stats() {
+	public static function get_overall_stats(): array {
 		$stats = self::get_dashboard_stats();
 		$detailed = self::get_detailed_metrics( 30 );
 		
-		// Initialize extended stats
 		$defaults = [ 'bounces' => 0, 'delivered' => 0, 'opened' => 0, 'clicked' => 0, 'complaints' => 0, 'delayed' => 0, 'held' => 0, 'dns_errors' => 0 ];
 		$stats = array_merge( $stats, $defaults );
 
@@ -288,23 +315,20 @@ class Stats {
 		return $stats;
 	}
 
-	public static function get_avg_response_time( $days = 30 ) {
+	public static function get_avg_response_time( int $days = 30 ): float {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_stats';
 		$date_from = date( 'Y-m-d', strtotime( "-$days days" ) );
 		return (float) $wpdb->get_var( $wpdb->prepare( "SELECT AVG(avg_response_time) FROM $table WHERE date >= %s", $date_from ) );
 	}
 
-	public static function get_templates_global_stats() {
+	public static function get_templates_global_stats(): array {
 		global $wpdb;
-		$logs_table = $wpdb->prefix . 'postal_logs';
 		$templates_table = $wpdb->prefix . 'postal_templates';
 		$servers_table = $wpdb->prefix . 'postal_servers';
 		
-		// Total Stats
 		$stats = $wpdb->get_row( "SELECT SUM(sent_count) as total_sent, AVG(CASE WHEN sent_count > 0 THEN (success_count / sent_count) * 100 ELSE 0 END) as avg_success_rate FROM $servers_table", ARRAY_A );
 		
-		// Top Template
 		$top_template = 'Aucun';
 		$has_usage_count = $wpdb->get_results( "SHOW COLUMNS FROM `$templates_table` LIKE 'usage_count'" );
 		if ( ! empty( $has_usage_count ) ) {
@@ -318,7 +342,7 @@ class Stats {
 		];
 	}
 	
-	public static function export_csv( $days = 30 ) {
+	public static function export_csv( int $days = 30 ): void {
 		if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Forbidden' );
 		
 		global $wpdb;
@@ -345,21 +369,20 @@ class Stats {
 		exit;
 	}
 	
-	public static function cleanup_old_stats() {
-		$days = get_option( 'pw_stats_retention_days', 90 );
+	public static function cleanup_old_stats(): void {
+		$days = (int) Settings::get( 'stats_retention_days', 90 );
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_stats';
 		$date = date( 'Y-m-d', strtotime( "-$days days" ) );
-		return $wpdb->query( $wpdb->prepare( "DELETE FROM $table WHERE date < %s", $date ) );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM $table WHERE date < %s", $date ) );
 	}
 
-	public static function get_top_templates( $days = 7, $limit = 10 ) {
+	public static function get_top_templates( int $days = 7, int $limit = 10 ): array {
 		global $wpdb;
 		$table_stats = $wpdb->prefix . 'postal_stats_history';
 		$table_tpl = $wpdb->prefix . 'postal_templates';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
 
-		// Fallback to legacy logs if history is empty
 		$count = $wpdb->get_var("SELECT COUNT(*) FROM $table_stats");
 		if ($count == 0) {
 			$logs_table = $wpdb->prefix . 'postal_logs';
@@ -390,13 +413,12 @@ class Stats {
 		), ARRAY_A ) ?: [];
 	}
 
-	public static function get_all_templates_summary( $days = 30 ) {
+	public static function get_all_templates_summary( int $days = 30 ): array {
 		global $wpdb;
 		$table_stats = $wpdb->prefix . 'postal_stats_history';
 		$table_tpl = $wpdb->prefix . 'postal_templates';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
 
-		// Fallback to legacy Logs if History is empty (during migration/transition)
 		$count = $wpdb->get_var("SELECT COUNT(*) FROM $table_stats");
 		if ($count == 0) {
 			$logs_table = $wpdb->prefix . 'postal_logs';
@@ -410,7 +432,6 @@ class Stats {
 				$date_from
 			), ARRAY_A ) ?: [];
 		} else {
-			// Use New History Table
 			$results = $wpdb->get_results( $wpdb->prepare(
 				"SELECT 
 					t.name as template_used, 
@@ -434,8 +455,7 @@ class Stats {
 		return $stats;
 	}
 
-	public static function get_server_stats_summary_filtered( $days = 30 ) {
-		// Used for Accordion Headers (Lightweight)
+	public static function get_server_stats_summary_filtered( int $days = 30 ): array {
 		global $wpdb;
 		$stats_table = $wpdb->prefix . 'postal_stats';
 		$servers_table = $wpdb->prefix . 'postal_servers';
@@ -456,18 +476,16 @@ class Stats {
 		), ARRAY_A ) ?: [];
 	}
 
-	public static function get_server_detail_breakdown( $server_id, $days = 30 ) {
-		// Used for Accordion Content (Heavy, Lazy Loaded)
+	public static function get_server_detail_breakdown( int $server_id, int $days = 30 ): array {
 		$cache_key = "pw_stats_server_{$server_id}_{$days}";
 		$cached = get_transient( $cache_key );
-		if ( $cached !== false ) return $cached;
+		if ( $cached !== false ) return (array)$cached;
 
 		global $wpdb;
 		$history_table = $wpdb->prefix . 'postal_stats_history';
 		$templates_table = $wpdb->prefix . 'postal_templates';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
 
-		// Aggregation by Template ID (Smart Null Grouping)
 		$results = $wpdb->get_results( $wpdb->prepare(
 			"SELECT 
 				COALESCE(t.name, 'null') as template_name,
@@ -488,11 +506,11 @@ class Stats {
 			$date_from
 		), ARRAY_A );
 
-		set_transient( $cache_key, $results, 60 ); // Cache 60s
-		return $results;
+		set_transient( $cache_key, $results, 60 );
+		return $results ?: [];
 	}
 
-	public static function get_template_performance( $days = 30 ) {
+	public static function get_template_performance( int $days = 30 ): array {
 		global $wpdb;
 		$table_metrics = $wpdb->prefix . 'postal_metrics';
 		$table_tpl = $wpdb->prefix . 'postal_templates';
@@ -524,7 +542,7 @@ class Stats {
 		return $performance;
 	}
 
-	public static function get_template_stats( $template_name, $days = 30 ) {
+	public static function get_template_stats( string $template_name, int $days = 30 ): array {
 		global $wpdb;
 		$table_metrics = $wpdb->prefix . 'postal_metrics';
 		$table_tpl = $wpdb->prefix . 'postal_templates';
@@ -546,23 +564,14 @@ class Stats {
 
 		foreach ( $results as $r ) {
 			$type = $r['event_type'];
-			
-			// Always add to the specific type found
 			if ( isset( $stats[$type] ) ) {
 				$stats[$type] += (int) $r['total'];
 			}
-
-			// Map 'sent' to 'delivered' as per Postal conventions (Optimistic delivery)
-			// because Postal primarily sends 'MessageSent' which we log as 'sent'.
 			if ( $type === 'sent' ) {
 				$stats['delivered'] += (int) $r['total'];
 			}
 		}
 		
-		// If we tracked 'delivered' separately from 'sent' in webhook, we might want to sum them or treat them distinctly.
-		// For now, let's assume 'sent' webhook event contributes to delivered count.
-		
-		// Calculate rates
 		$total_delivered = $stats['delivered'] ?? 0;
 		$stats['open_rate'] = $total_delivered > 0 ? round( ( $stats['opened'] / $total_delivered ) * 100, 1 ) : 0;
 		$stats['click_rate'] = $total_delivered > 0 ? round( ( $stats['clicked'] / $total_delivered ) * 100, 1 ) : 0;
@@ -571,19 +580,11 @@ class Stats {
 		return $stats;
 	}
 
-	public static function get_global_stats( $days = 30 ) {
+	public static function get_global_stats( int $days = 30 ): array {
 		global $wpdb;
 		$stats_table = $wpdb->prefix . 'postal_stats';
 		$daily_table = $wpdb->prefix . 'postal_stats_daily';
 		$date_from = date( 'Y-m-d', strtotime( "-$days days" ) );
-		
-		// Cette requête combine les données archivées (daily) et les données récentes (stats)
-		// Cependant, pour simplifier et comme 'postal_stats' garde aussi l'historique (sauf si purgé),
-		// on devrait idéalement interroger daily_table pour le passé et stats_table pour aujourd'hui.
-		
-		// Stratégie hybride : 
-		// Jours < Aujourd'hui => daily_table
-		// Aujourd'hui => stats_table
 		
 		$today = current_time( 'Y-m-d' );
 		
@@ -603,27 +604,16 @@ class Stats {
 		return $wpdb->get_results( $wpdb->prepare( $sql, $date_from, $today, $today ), ARRAY_A ) ?: [];
 	}
 
-	public static function increment_warmup_day() {
-		global $wpdb;
-		$table = $wpdb->prefix . 'postal_servers';
-		// Only increment for active servers
-		$wpdb->query( "UPDATE $table SET warmup_day = warmup_day + 1 WHERE active = 1" );
-
-		// V3: Increment ISP specific warmup days and reset daily counters
-		$table_isp = $wpdb->prefix . 'postal_server_isp_stats';
-		$wpdb->query( "UPDATE $table_isp SET warmup_day = warmup_day + 1, sent_today = 0, delivered_today = 0, fails_today = 0" );
+	public static function increment_warmup_day(): void {
+		WarmupEngine::process_daily_advancement();
 	}
 
-	public static function aggregate_daily_stats() {
+	public static function aggregate_daily_stats(): void {
 		global $wpdb;
 		$source_table = $wpdb->prefix . 'postal_stats';
 		$target_table = $wpdb->prefix . 'postal_stats_daily';
 		
-		// On agrège tout ce qui n'est pas "Aujourd'hui" (car aujourd'hui bouge encore)
 		$yesterday = date( 'Y-m-d', strtotime( 'yesterday' ) );
-		
-		// On récupère les dates présentes dans stats mais pas dans daily
-		// Ou on fait un INSERT ... ON DUPLICATE KEY UPDATE massif
 		
 		$sql = "INSERT INTO $target_table (server_id, date, total_sent, total_success, total_error, avg_response_time, updated_at)
 				SELECT server_id, date, SUM(sent_count), SUM(success_count), SUM(error_count), AVG(avg_response_time), NOW()
@@ -638,29 +628,13 @@ class Stats {
 				updated_at = NOW()";
 				
 		$wpdb->query( $wpdb->prepare( $sql, $yesterday ) );
-		
-		// Optionnel : Purge des données horaires très vieilles (si on veut gagner de la place)
-		// $retention_detailed = 90; 
-		// $date_purge = date('Y-m-d', strtotime("-$retention_detailed days"));
-		// $wpdb->query( $wpdb->prepare( "DELETE FROM $source_table WHERE date < %s", $date_purge ) );
 	}
 
-	public static function get_advanced_charts_data( $days = 30 ) {
+	public static function get_advanced_charts_data( int $days = 30 ): array {
 		global $wpdb;
 		$table_stats = $wpdb->prefix . 'postal_stats_history';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
 
-		// 1. Volume per day
-		$volume = $wpdb->get_results( $wpdb->prepare(
-			"SELECT DATE(timestamp) as date, COUNT(*) as count 
-			FROM $table_stats 
-			WHERE timestamp >= %s AND event_type = 'sent'
-			GROUP BY DATE(timestamp) ORDER BY date ASC",
-			$date_from
-		), ARRAY_A );
-
-		// 2. Deliverability Rate per day (Delivered / Sent)
-		// Requires grouping by day and event type.
 		$daily_events = $wpdb->get_results( $wpdb->prepare(
 			"SELECT DATE(timestamp) as date, event_type, COUNT(DISTINCT message_id) as count
 			FROM $table_stats
@@ -690,11 +664,7 @@ class Stats {
 		foreach ($metrics_by_date as $date => $counts) {
 			$chart_data['sent'][] = $counts['sent'];
 			
-			// Optimistic delivery: Sent contributes to potential delivery.
-			// Rate = Delivered / Sent.
 			$del_rate = ($counts['sent'] > 0) ? round(($counts['delivered'] / $counts['sent']) * 100, 2) : 0;
-			// Use sent as delivered proxy if 'delivered' webhook not enabled? No, stick to real data.
-			// If 'delivered' count > 'sent' (due to async), cap at 100?
 			if ($del_rate > 100) $del_rate = 100;
 			$chart_data['deliverability'][] = $del_rate;
 
@@ -708,13 +678,12 @@ class Stats {
 		return $chart_data;
 	}
 
-	public static function get_heatmap_data( $days = 30 ) {
+	public static function get_heatmap_data( int $days = 30 ): array {
 		global $wpdb;
 		$table_stats = $wpdb->prefix . 'postal_stats_history';
 		$table_tpl = $wpdb->prefix . 'postal_templates';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
 
-		// Heatmap: Rows=Templates, Cols=Hour(0-23), Value=Count(sent)
 		$results = $wpdb->get_results( $wpdb->prepare(
 			"SELECT t.name as template, HOUR(h.timestamp) as hour, COUNT(*) as count
 			FROM $table_stats h
@@ -724,8 +693,6 @@ class Stats {
 			$date_from
 		), ARRAY_A );
 
-		// Format for frontend
-		// { template: { 0: 5, 1: 0, ... 23: 10 } }
 		$heatmap = [];
 		foreach ($results as $row) {
 			$tpl = $row['template'];

@@ -1,119 +1,85 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Services;
 
+use PostalWarmup\Admin\Settings;
+
+
+
 /**
- * Service de chiffrement des données sensibles (Clés API)
+ * Service de chiffrement des données sensibles (API Keys)
  */
 class Encryption {
 
-	/**
-	 * Méthode de chiffrement
-	 */
-	private const METHOD = 'AES-256-CBC';
+	private const METHOD = 'aes-256-cbc';
 
-	/**
-	 * Récupère la clé de chiffrement
-	 * Utilise SECURE_AUTH_KEY si disponible, sinon une clé générée stockée en base.
-	 */
-	private static function get_key(): string {
-		if ( defined( 'SECURE_AUTH_KEY' ) ) {
-			return SECURE_AUTH_KEY;
-		}
-		
-		$key = get_option( 'pw_encryption_key' );
-		if ( empty( $key ) ) {
-			$key = wp_generate_password( 64, true, true );
-			update_option( 'pw_encryption_key', $key );
-		}
-		
-		return $key;
-	}
-
-	/**
-	 * Récupère l'ancienne clé (fallback pour les installations existantes)
-	 */
-	private static function get_legacy_key(): string {
-		return hash( 'sha256', get_site_url() );
-	}
-
-	/**
-	 * Chiffre une chaîne
-	 *
-	 * @param string $data La donnée à chiffrer.
-	 * @return string La donnée chiffrée en base64 (IV + Data).
-	 */
 	public static function encrypt( string $data ): string {
-		if ( empty( $data ) ) {
-			return '';
-		}
+		if ( empty( $data ) ) return '';
 
-		$key = hash( 'sha256', self::get_key() );
+		$key = self::get_key();
 		$iv_length = openssl_cipher_iv_length( self::METHOD );
 		$iv = openssl_random_pseudo_bytes( $iv_length );
 
 		$encrypted = openssl_encrypt( $data, self::METHOD, $key, 0, $iv );
 
-		// On retourne l'IV et le texte chiffré, encodés en base64 pour le stockage
-		return base64_encode( $iv . $encrypted );
+		// Use HMAC for integrity check
+		$hmac = hash_hmac( 'sha256', $encrypted, $key );
+
+		return base64_encode( $iv . $hmac . $encrypted );
 	}
 
-	/**
-	 * Déchiffre une chaîne
-	 *
-	 * @param string $data La donnée chiffrée (base64).
-	 * @return string La donnée en clair, ou la donnée originale si échec.
-	 */
 	public static function decrypt( string $data ): string {
-		if ( empty( $data ) ) {
-			return '';
-		}
+		if ( empty( $data ) ) return '';
 
-		// Tenter de décoder le base64
-		$raw = base64_decode( $data, true );
-		if ( $raw === false ) {
-			// Ce n'est pas du base64 valide, c'est peut-être une ancienne clé non chiffrée
-			return $data;
-		}
-
-		$key = hash( 'sha256', self::get_key() );
+		$key = self::get_key();
+		$raw = base64_decode( $data );
 		$iv_length = openssl_cipher_iv_length( self::METHOD );
 
-		// Vérifier que la longueur est suffisante pour contenir l'IV
-		if ( strlen( $raw ) < $iv_length ) {
-			return $data;
+		// Check minimal length (IV + HMAC + Data)
+		if ( strlen( $raw ) < $iv_length + 32 ) {
+			// Try legacy decryption (no HMAC) for backward compatibility
+			return self::decrypt_legacy( $data );
 		}
 
 		$iv = substr( $raw, 0, $iv_length );
-		$ciphertext = substr( $raw, $iv_length );
+		$hmac = substr( $raw, $iv_length, 32 );
+		$encrypted = substr( $raw, $iv_length + 32 );
 
-		$decrypted = openssl_decrypt( $ciphertext, self::METHOD, $key, 0, $iv );
-
-		// Fallback : Essayer avec l'ancienne clé si SECURE_AUTH_KEY n'est pas définie
-		// (car cela signifie qu'on est passé de la clé site_url à la clé générée)
-		if ( $decrypted === false && ! defined( 'SECURE_AUTH_KEY' ) ) {
-			$legacy_key = hash( 'sha256', self::get_legacy_key() );
-			$decrypted = openssl_decrypt( $ciphertext, self::METHOD, $legacy_key, 0, $iv );
+		$calcmac = hash_hmac( 'sha256', $encrypted, $key );
+		if ( ! hash_equals( $hmac, $calcmac ) ) {
+			return ''; // Integrity failed
 		}
 
-		// Si le déchiffrement échoue encore, on retourne la donnée originale
-		if ( $decrypted === false ) {
-			return $data;
-		}
-
-		return $decrypted;
+		return openssl_decrypt( $encrypted, self::METHOD, $key, 0, $iv ) ?: '';
 	}
 
-	/**
-	 * Vérifie si une chaîne semble chiffrée (heuristique simple)
-	 */
-	public static function is_encrypted( string $data ): bool {
-		$raw = base64_decode( $data, true );
-		if ( $raw === false ) {
-			return false;
-		}
-		// Longueur minimum (IV + au moins un bloc)
+	private static function decrypt_legacy( string $data ): string {
+		$key = self::get_key();
+		$raw = base64_decode( $data );
 		$iv_length = openssl_cipher_iv_length( self::METHOD );
-		return strlen( $raw ) > $iv_length;
+
+		if ( strlen( $raw ) <= $iv_length ) return '';
+
+		$iv = substr( $raw, 0, $iv_length );
+		$encrypted = substr( $raw, $iv_length );
+
+		return openssl_decrypt( $encrypted, self::METHOD, $key, 0, $iv ) ?: '';
+	}
+
+	private static function get_key(): string {
+		// Use SECURE_AUTH_KEY if available, else fallback to a stored random key
+		if ( defined( 'SECURE_AUTH_KEY' ) ) {
+			return substr( SECURE_AUTH_KEY, 0, 32 );
+		}
+
+		// Fallback (Not recommended for prod but prevents crash)
+		$key = get_option( 'pw_encryption_key' );
+		if ( ! $key ) {
+			$key = wp_generate_password( 64, true, true );
+			update_option( 'pw_encryption_key', $key );
+		}
+		return substr( $key, 0, 32 );
 	}
 }

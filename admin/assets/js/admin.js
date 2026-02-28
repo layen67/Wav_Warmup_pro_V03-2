@@ -150,6 +150,78 @@
                 .always(() => $btn.prop('disabled', false).text(oldText));
         });
 
+        // --- WEBHOOK TEST ---
+        $(document).on('click', '#pw-test-webhook-btn', function(e) {
+            e.preventDefault();
+            const $btn = $(this);
+            const url = $('#pw_webhook_url').val();
+            const $res = $('#pw-webhook-test-result');
+
+            if (!url) {
+                alert('Veuillez entrer une URL.');
+                return;
+            }
+
+            const oldText = $btn.text();
+            $btn.prop('disabled', true).text('Test en cours...');
+            $res.html('');
+
+            $.post(pwAdmin.ajaxurl, {
+                action: 'pw_test_webhook',
+                nonce: pwAdmin.nonce,
+                url: url
+            })
+            .done(function(res) {
+                if (res.success) {
+                    $res.html('<span style="color:#46b450; font-weight:bold;">' + res.data.message + '</span>');
+                } else {
+                    $res.html('<span style="color:#dc3232; font-weight:bold;">' + res.data.message + '</span>');
+                }
+            })
+            .fail(function() {
+                $res.html('<span style="color:#dc3232;">Erreur réseau lors du test.</span>');
+            })
+            .always(function() {
+                $btn.prop('disabled', false).text(oldText);
+            });
+        });
+
+        // --- DOMSCAN AUDIT ---
+        $(document).on('click', '.pw-domscan-btn', function(e) {
+            e.preventDefault();
+            const $btn = $(this);
+            const domain = $btn.data('domain');
+            const $cell = $btn.parent();
+
+            $btn.prop('disabled', true).text('Scan...');
+
+            $.post(pwAdmin.ajaxurl, {
+                action: 'pw_run_domscan_audit',
+                nonce: pwAdmin.nonce,
+                domain: domain
+            })
+            .done(function(res) {
+                if (res.success && res.data.data) {
+                    const audit = res.data.data;
+                    const blacklist = audit.blacklist_count || 0;
+                    const trust = audit.reputation_score || '?';
+                    const color = (blacklist > 0) ? '#dc3232' : '#46b450';
+
+                    let html = `<span class='pw-badge' style='background-color:${color}'>BL: ${blacklist}</span>`;
+                    html += `<br><small>Trust: ${trust}/100</small>`;
+
+                    $cell.html(html);
+                } else {
+                    alert(res.data.message || 'Erreur lors de l\'audit');
+                    $btn.prop('disabled', false).text('Réessayer');
+                }
+            })
+            .fail(function() {
+                alert('Erreur réseau');
+                $btn.prop('disabled', false).text('Réessayer');
+            });
+        });
+
         // --- DASHBOARD REALTIME ---
         let activityChart = null;
 
@@ -209,6 +281,47 @@
             html += '</ul>';
             $container.html(html);
         }
+    });
+
+    // --- API KEY MODAL MANAGER (Servers) ---
+    $(document).ready(function() {
+        if (!$('#pw-api-key-modal').length) return;
+
+        // Open Modal
+        $(document).on('click', '#pw-change-api-key-btn', function(e) {
+            e.preventDefault();
+            $('#pw-new-api-key-input').val('');
+            $('#pw-api-key-modal').css('display', 'flex').hide().fadeIn(200);
+        });
+
+        // Close Modal
+        $(document).on('click', '#pw-api-key-modal .pw-modal-close', function(e) {
+            e.preventDefault();
+            $('#pw-api-key-modal').fadeOut(200);
+        });
+
+        // Confirm Change
+        $(document).on('click', '#pw-confirm-api-key', function(e) {
+            e.preventDefault();
+            const newKey = $('#pw-new-api-key-input').val().trim();
+
+            if (!newKey) {
+                alert('Veuillez entrer une clé API valide.');
+                $('#pw-new-api-key-input').focus();
+                return;
+            }
+
+            // Update hidden fields
+            $('#api_key_modified').val('1');
+            $('#api_key_new').val(newKey);
+
+            // Visual feedback
+            $('#pw-api-key-modal').fadeOut(200);
+            $('#pw-change-api-key-btn').html('<span class="dashicons dashicons-yes"></span> Modifiée').removeClass('pw-btn-secondary').addClass('pw-btn-success');
+
+            // Optional: submit form immediately? No, user might want to save other fields.
+            // But we should visually indicate the key is staged for update.
+        });
     });
 
     // --- SUPPRESSION LIST MANAGER ---

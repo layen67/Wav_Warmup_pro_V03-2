@@ -1,54 +1,25 @@
-<?php
-/**
- * admin/partials/template-preview-modal.php
- * Template Preview Modal v3.1
- */
-
-if (!defined('ABSPATH')) exit;
-?>
-
-<div id="pw-template-preview-modal" class="pw-modal" style="display:none;">
-    <div class="pw-modal-content pw-modal-lg">
+<div id="pw-template-preview-modal" class="pw-modal">
+    <div class="pw-modal-content pw-modal-large" style="height: 80vh; display: flex; flex-direction: column;">
         <div class="pw-modal-header">
-            <h2 id="pw-preview-title">Aperçu du Template</h2>
-            <div class="pw-preview-actions">
-                <select id="pw-preview-variant-select" class="pw-filter-select">
-                    <!-- Variantes injectées en JS -->
-                </select>
-                <button class="pw-modal-close">&times;</button>
-            </div>
+            <h3 id="pw-preview-title">Aperçu</h3>
+            <button class="pw-modal-close">&times;</button>
         </div>
         
-        <div class="pw-modal-body no-padding">
-            <div class="pw-preview-container">
-                <div class="pw-preview-sidebar">
-                    <div class="pw-preview-meta">
-                        <label>De :</label>
-                        <div id="pw-preview-from"></div>
-                    </div>
-                    <div class="pw-preview-meta">
-                        <label>Objet :</label>
-                        <div id="pw-preview-subject"></div>
-                    </div>
-                    <div class="pw-preview-device-toggle">
-                        <button class="pw-device-btn active" data-device="desktop"><span class="dashicons dashicons-desktop"></span></button>
-                        <button class="pw-device-btn" data-device="mobile"><span class="dashicons dashicons-smartphone"></span></button>
-                    </div>
-                </div>
-                
-                <div class="pw-preview-frame-container">
-                    <iframe id="pw-preview-frame" src="about:blank"></iframe>
-                    <div id="pw-preview-text-fallback" style="display:none;"></div>
-                </div>
-            </div>
+        <div class="pw-preview-toolbar" style="padding: 10px; background: #f0f0f1; border-bottom: 1px solid #ddd; display: flex; gap: 15px; align-items: center;">
+            <label>Contexte de simulation : </label>
+            <select id="pw-preview-context">
+                <option value="male">Homme (Jean Dupont)</option>
+                <option value="female">Femme (Marie Curie)</option>
+                <option value="company">Entreprise (Contact)</option>
+            </select>
         </div>
-        
-        <div class="pw-modal-footer">
-            <div class="pw-preview-footer-info">
-                <span class="dashicons dashicons-info"></span>
-                Les variables <code>{{email}}</code>, <code>{{site_url}}</code>, etc. sont remplacées par des données de test.
+
+        <div class="pw-modal-body" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 0;">
+            <div style="padding: 15px; background: #fff; border-bottom: 1px solid #eee;">
+                <strong>De :</strong> <span id="pw-preview-from"></span><br>
+                <strong>Sujet :</strong> <span id="pw-preview-subject"></span>
             </div>
-            <button type="button" class="pw-btn pw-btn-secondary pw-modal-close">Fermer</button>
+            <iframe id="pw-preview-frame" style="flex: 1; width: 100%; border: none;"></iframe>
         </div>
     </div>
 </div>

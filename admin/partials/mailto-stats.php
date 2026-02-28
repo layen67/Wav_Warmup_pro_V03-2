@@ -12,9 +12,9 @@ $days = isset($_GET['days']) ? (int) $_GET['days'] : 30;
 $days = max(1, min(365, $days));
 
 // Récupérer les stats
-$clicks_by_template = PW_Warmup_Mailto::get_clicks_by_template($days);
-$clicks_by_page = PW_Warmup_Mailto::get_clicks_by_page($days, 10);
-$all_stats = PW_Warmup_Mailto::get_click_stats($days);
+$clicks_by_template = \PostalWarmup\Services\Mailto::get_clicks_by_template($days);
+$clicks_by_page = \PostalWarmup\Services\Mailto::get_clicks_by_page($days, 10);
+$all_stats = \PostalWarmup\Services\Mailto::get_click_stats($days);
 
 // Calculer le total
 $total_clicks = 0;

@@ -1,30 +1,50 @@
 <?php
+// src/Core/Activator.php
+
+declare(strict_types=1);
 
 namespace PostalWarmup\Core;
 
 use PostalWarmup\Services\Logger;
+use PostalWarmup\Admin\Settings;
 
 /**
  * Fired during plugin activation.
  */
 class Activator {
 
-	public static function activate() {
+	public static function activate(): void {
 		self::check_requirements();
 		self::create_tables();
 		self::set_default_options();
 		self::schedule_cron_jobs();
+		self::cleanup_debug_files();
 		flush_rewrite_rules();
 		set_transient( 'pw_activation_notice', true, 60 );
 	}
 
-	private static function check_requirements() {
+	private static function cleanup_debug_files(): void {
+		if ( Settings::get( 'auto_cleanup_debug_files', true ) ) {
+			$sensitive = [
+				PW_PLUGIN_DIR . 'debug.log',
+				PW_PLUGIN_DIR . 'error_log',
+				PW_PLUGIN_DIR . 'postal-warmup-debug.log'
+			];
+			foreach ( $sensitive as $file ) {
+				if ( file_exists( $file ) && is_writable( $file ) ) {
+					unlink( $file );
+				}
+			}
+		}
+	}
+
+	private static function check_requirements(): void {
 		global $wp_version;
 		if ( version_compare( $wp_version, '5.8', '<' ) ) {
 			deactivate_plugins( plugin_basename( PW_PLUGIN_FILE ) );
 			wp_die( 'This plugin requires WordPress 5.8 or higher.', 'Activation Error', [ 'back_link' => true ] );
 		}
-		if ( version_compare( PHP_VERSION, '8.1', '<' ) ) { // Updated requirement
+		if ( version_compare( PHP_VERSION, '8.1', '<' ) ) {
 			deactivate_plugins( plugin_basename( PW_PLUGIN_FILE ) );
 			wp_die( 'This plugin requires PHP 8.1 or higher.', 'Activation Error', [ 'back_link' => true ] );
 		}
@@ -34,13 +54,19 @@ class Activator {
 		}
 	}
 
-	private static function create_tables() {
+	private static function create_tables(): void {
 		global $wpdb;
 		$charset_collate = $wpdb->get_charset_collate();
 		
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-		// 1. Servers
+		$lock_key = 'pw_db_update_lock';
+		if ( get_transient( $lock_key ) ) {
+			return;
+		}
+		set_transient( $lock_key, true, 30 );
+
+		// 1. Servers (Added lifecycle columns)
 		$table_servers = $wpdb->prefix . 'postal_servers';
 		$sql_servers = "CREATE TABLE $table_servers (
 			id int NOT NULL AUTO_INCREMENT,
@@ -58,9 +84,16 @@ class Activator {
 			last_used datetime DEFAULT NULL,
 			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			updated_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			postal_route_id varchar(100) NULL,
+			postal_endpoint_id varchar(100) NULL,
+			incoming_configured tinyint(1) DEFAULT 0,
+			incoming_last_check datetime NULL,
+			migration_target_server_id int NULL,
+			deleted_at datetime NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY domain (domain),
-			KEY idx_active (active)
+			KEY idx_active (active),
+			KEY idx_priority (priority)
 		) $charset_collate;";
 		dbDelta( $sql_servers );
 
@@ -108,7 +141,7 @@ class Activator {
 		) $charset_collate;";
 		dbDelta( $sql_stats );
 
-		// 4. Mailto Clicks (Optional)
+		// 4. Mailto Clicks
 		$table_mailto = $wpdb->prefix . 'postal_mailto_clicks';
 		$sql_mailto = "CREATE TABLE $table_mailto (
 			id bigint NOT NULL AUTO_INCREMENT,
@@ -142,6 +175,7 @@ class Activator {
 			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			updated_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			created_by bigint DEFAULT NULL,
+			default_label varchar(255) DEFAULT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY name (name),
 			KEY idx_folder (folder_id),
@@ -220,7 +254,7 @@ class Activator {
 		) $charset_collate;";
 		dbDelta( $sql_metrics );
 
-		// 11. Daily Stats Summary (Performance Optimization)
+		// 11. Daily Stats Summary
 		$table_daily = $wpdb->prefix . 'postal_stats_daily';
 		$sql_daily = "CREATE TABLE $table_daily (
 			id bigint NOT NULL AUTO_INCREMENT,
@@ -237,7 +271,7 @@ class Activator {
 		) $charset_collate;";
 		dbDelta( $sql_daily );
 
-		// 12. Permanent Stats History (New Architecture)
+		// 12. Permanent Stats History
 		$table_stats_history = $wpdb->prefix . 'postal_stats_history';
 		$sql_stats_history = "CREATE TABLE $table_stats_history (
 			id bigint NOT NULL AUTO_INCREMENT,
@@ -288,7 +322,7 @@ class Activator {
 		) $charset_collate;";
 		dbDelta( $sql_queue );
 
-		// 14. Custom ISPs (Refonte Profils)
+		// 14. Custom ISPs
 		$table_isps = $wpdb->prefix . 'postal_isps';
 		$sql_isps = "CREATE TABLE $table_isps (
 			id bigint NOT NULL AUTO_INCREMENT,
@@ -307,7 +341,7 @@ class Activator {
 		) $charset_collate;";
 		dbDelta( $sql_isps );
 
-		// 15. Server ISP Stats (Réputation & Perf)
+		// 15. Server ISP Stats
 		$table_server_isp = $wpdb->prefix . 'postal_server_isp_stats';
 		$sql_server_isp = "CREATE TABLE $table_server_isp (
 			id bigint NOT NULL AUTO_INCREMENT,
@@ -339,18 +373,106 @@ class Activator {
 			UNIQUE KEY name (name)
 		) $charset_collate;";
 		dbDelta( $sql_strategies );
+
+		// 17. Conversations (NEW)
+		$table_conversations = $wpdb->prefix . 'postal_conversations';
+		$sql_conversations = "CREATE TABLE $table_conversations (
+			id int NOT NULL AUTO_INCREMENT,
+			original_message_id varchar(255) NULL,
+			thread_id varchar(255) NULL,
+			contact_email varchar(255) NOT NULL,
+			server_id int NOT NULL,
+			from_prefix varchar(100) NOT NULL DEFAULT 'contact',
+			scenario_id int NULL,
+			current_stage int DEFAULT 0,
+			loop_cycle int DEFAULT 0,
+			last_contact_at datetime NULL,
+			next_scheduled_at datetime NULL,
+			templates_sent longtext NULL COMMENT 'JSON array of sent template names',
+			waiting_for_reply tinyint(1) DEFAULT 1,
+			pending_reply tinyint(1) DEFAULT 0,
+			migration_status varchar(20) DEFAULT 'none',
+			migrated_to_server_id int NULL,
+			migrated_at datetime NULL,
+			status varchar(20) DEFAULT 'active',
+			reply_subject text NULL,
+			reply_body longtext NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY idx_contact (contact_email),
+			KEY idx_server (server_id),
+			KEY idx_status (status),
+			KEY idx_scenario (scenario_id)
+		) $charset_collate;";
+		dbDelta( $sql_conversations );
+
+		// 18. Scenarios (NEW)
+		$table_scenarios = $wpdb->prefix . 'postal_scenarios';
+		$sql_scenarios = "CREATE TABLE $table_scenarios (
+			id int NOT NULL AUTO_INCREMENT,
+			name varchar(255) NOT NULL,
+			description text NULL,
+			trigger_event varchar(100) NOT NULL DEFAULT 'reply',
+			conditions longtext NULL COMMENT 'JSON',
+			steps longtext NOT NULL COMMENT 'JSON array of steps',
+			reply_template_name varchar(255) NULL,
+			migration_template varchar(255) NULL,
+			loop_back_to_stage int DEFAULT 0,
+			loop_max_cycles int DEFAULT 0,
+			require_reply_to_advance tinyint(1) DEFAULT 1,
+			reactivation_delay_days int DEFAULT 7,
+			reactivation_template varchar(255) NULL,
+			allowed_server_ids longtext NULL COMMENT 'JSON array of server IDs, NULL = all',
+			priority int DEFAULT 10,
+			active tinyint(1) DEFAULT 1,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY idx_trigger (trigger_event),
+			KEY idx_active (active)
+		) $charset_collate;";
+		dbDelta( $sql_scenarios );
+
+		// 19. Reply Rules (NEW)
+		$table_rules = $wpdb->prefix . 'postal_reply_template_rules';
+		$sql_rules = "CREATE TABLE $table_rules (
+			id int NOT NULL AUTO_INCREMENT,
+			name varchar(255) NOT NULL,
+			match_prefix varchar(100) NULL,
+			match_server_id int NULL,
+			match_subject_contains varchar(255) NULL,
+			match_body_contains varchar(255) NULL,
+			response_template_name varchar(255) NOT NULL,
+			scenario_id int NULL,
+			priority int DEFAULT 10,
+			active tinyint(1) DEFAULT 1,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY idx_prefix (match_prefix),
+			KEY idx_server (match_server_id),
+			KEY idx_active (active)
+		) $charset_collate;";
+		dbDelta( $sql_rules );
+
+		// Add capability
+		$role = get_role( 'administrator' );
+		if ( $role ) {
+			$role->add_cap( 'manage_postal_warmup' );
+		}
+
+		delete_transient( $lock_key );
 	}
 
-	private static function set_default_options() {
+	private static function set_default_options(): void {
 		add_option( 'pw_version', PW_VERSION );
 		
-		// Générer un secret s'il n'existe pas (utilisé comme token de validation GET)
 		if ( ! get_option( 'pw_webhook_secret' ) ) {
 			update_option( 'pw_webhook_secret', wp_generate_password( 64, false ) );
 		}
 		
 		add_option( 'pw_enable_logging', true );
-		add_option( 'pw_log_mode', 'file' ); // Default to file only
+		add_option( 'pw_log_mode', 'file' );
 		add_option( 'pw_log_retention_days', 30 );
 		add_option( 'pw_stats_enabled', true );
 		add_option( 'pw_max_retries', 3 );
@@ -358,7 +480,7 @@ class Activator {
 		self::install_default_isps();
 	}
 
-	private static function install_default_isps() {
+	private static function install_default_isps(): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_isps';
 		
@@ -406,18 +528,22 @@ class Activator {
 		}
 	}
 
-	private static function schedule_cron_jobs() {
-		if ( ! wp_next_scheduled( 'pw_cleanup_old_logs' ) ) {
-			wp_schedule_event( time(), 'daily', 'pw_cleanup_old_logs' );
-		}
-		if ( ! wp_next_scheduled( 'pw_cleanup_old_stats' ) ) {
-			wp_schedule_event( time(), 'weekly', 'pw_cleanup_old_stats' );
-		}
-		if ( ! wp_next_scheduled( 'pw_daily_stats_aggregation' ) ) {
-			wp_schedule_event( time(), 'daily', 'pw_daily_stats_aggregation' );
-		}
-		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
-			wp_schedule_event( time(), 'daily', 'pw_daily_report' );
+	private static function schedule_cron_jobs(): void {
+		$jobs = [
+			'pw_process_queue' => ['interval' => 'every_minute', 'offset' => 0],
+			'pw_warmup_daily_increment' => ['interval' => 'daily', 'offset' => strtotime('tomorrow 00:00:00') - time()],
+			'pw_cleanup_old_logs' => ['interval' => 'daily', 'offset' => 0],
+			'pw_daily_report' => ['interval' => 'daily', 'offset' => 0],
+			'pw_cleanup_old_stats' => ['interval' => 'daily', 'offset' => 0],
+			'pw_daily_stats_aggregation'=> ['interval' => 'daily', 'offset' => 0],
+			'pw_cleanup_queue' => ['interval' => 'daily', 'offset' => 0],
+			'pw_scenario_daily_check' => ['interval' => 'daily', 'offset' => 0],
+		];
+
+		foreach ($jobs as $hook => $cfg) {
+			if (!wp_next_scheduled($hook)) {
+				wp_schedule_event(time() + $cfg['offset'], $cfg['interval'], $hook);
+			}
 		}
 	}
 }

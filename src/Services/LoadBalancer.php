@@ -52,6 +52,15 @@ class LoadBalancer {
         foreach ( $servers as $server ) {
             $server_id = (int) $server['id'];
             
+            // Check Smart Routing Cooldown (if enabled)
+            if ( $target_isp && get_option( 'pw_smart_routing_enabled', true ) ) {
+                $cooldown_key = "pw_cooldown_{$server_id}_{$target_isp}";
+                if ( get_transient( $cooldown_key ) ) {
+                    Logger::debug( "LoadBalancer: Server {$server['domain']} skipped for $target_isp (Cooldown active)" );
+                    continue;
+                }
+            }
+
             // 1. Global Metrics
             $global_limit = Stats::get_dynamic_limit( $server );
             $global_usage = Stats::get_server_daily_usage( $server_id );

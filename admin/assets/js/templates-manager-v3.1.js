@@ -337,8 +337,18 @@
              
             // Copy shortcode 
             $(document).on('click', '.pw-copy-shortcode-btn', (e) => { 
-                const $input = $(e.currentTarget).prev('input'); 
-                this.copyToClipboard($input.val(), $(e.currentTarget)); 
+                const $card = $(e.currentTarget).closest('.pw-template-card');
+                const name = $card.data('template-name');
+                const format = $card.find('.pw-shortcode-select').val();
+
+                // Use 'template' attribute as it is the standard and confirmed working
+                // Remove 'label' to allow dynamic retrieval from template settings
+                let shortcode = `[warmup_mailto template="${name}"]`;
+                if (format === 'button') {
+                    shortcode = `[warmup_mailto template="${name}" style="button"]`;
+                }
+
+                this.copyToClipboard(shortcode, $(e.currentTarget));
             }); 
              
             // Filters 
@@ -680,7 +690,51 @@
         }, 
          
         initDragDrop() { 
-            // Simplified Drag & Drop for demo
+            const self = this;
+
+            // Drag Start
+            $(document).on('dragstart', '.pw-template-card', function(e) {
+                const card = $(this);
+                const id = card.data('template-id');
+                // Use standard dataTransfer
+                e.originalEvent.dataTransfer.setData('text/plain', id);
+                e.originalEvent.dataTransfer.effectAllowed = 'move';
+                card.addClass('pw-dragging');
+            });
+
+            $(document).on('dragend', '.pw-template-card', function(e) {
+                $(this).removeClass('pw-dragging');
+                $('.pw-folder-item').removeClass('pw-drag-over');
+            });
+
+            // Drag Over (Folders)
+            $(document).on('dragover', '.pw-folder-item', function(e) {
+                e.preventDefault();
+                e.originalEvent.dataTransfer.dropEffect = 'move';
+                $(this).addClass('pw-drag-over');
+            });
+
+            $(document).on('dragleave', '.pw-folder-item', function(e) {
+                $(this).removeClass('pw-drag-over');
+            });
+
+            // Drop
+            $(document).on('drop', '.pw-folder-item', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $(this).removeClass('pw-drag-over');
+
+                const templateId = e.originalEvent.dataTransfer.getData('text/plain');
+                const folderId = $(this).data('folder-id');
+
+                if (templateId && folderId !== undefined) {
+                    // Visual feedback immediately
+                    const $card = $(`.pw-template-card[data-template-id="${templateId}"]`);
+                    $card.fadeOut(200, function() {
+                        self.moveTemplate(templateId, folderId);
+                    });
+                }
+            });
         }, 
          
         renderTemplates() { 
@@ -762,14 +816,231 @@
                 this.loadTemplate(templateName);
             } else {
                 $('#pw-editor-title').text('Nouveau Template');
-                // Add one default variant for each
+                this.resetForm();
+
+                // Add default variant rows for better UX
                 this.addVariant('subject');
-                this.addVariant('from_name');
                 this.addVariant('text');
                 this.addVariant('html');
+                this.addVariant('from_name');
             }
             
             $modal.show();
+
+            // Bind Toolbar Events (once)
+            this.bindToolbarEvents();
+        },
+
+        bindToolbarEvents() {
+            if (this._toolbarBound) return;
+            this._toolbarBound = true;
+
+            this.bindBase64Events();
+
+            // Toolbar: Expand/Focus Mode
+            $(document).on('click', '.pw-expand-btn', function(e) {
+                e.preventDefault();
+                const $editor = $(this).closest('.pw-variant-item').find('.pw-variant-editor');
+                const $textarea = $editor.find('.pw-variant-input');
+
+                // Create fullscreen modal
+                const $overlay = $('<div class="pw-focus-overlay"><div class="pw-focus-container"><div class="pw-focus-header"><h3>Mode Édition (Focus)</h3><button class="pw-focus-close">&times;</button></div><textarea class="pw-focus-textarea"></textarea></div></div>');
+
+                $('body').append($overlay);
+                $overlay.find('textarea').val($textarea.val()).focus();
+
+                // Sync back on close
+                const closeFocus = () => {
+                    $textarea.val($overlay.find('textarea').val()).trigger('input');
+                    $overlay.remove();
+                };
+
+                $overlay.find('.pw-focus-close').on('click', closeFocus);
+                $overlay.on('click', function(e) {
+                    if ($(e.target).hasClass('pw-focus-overlay')) closeFocus();
+                });
+            });
+
+            // Toolbar: Insert Variable (Modified to NOT insert on change if using Copy button workflow)
+            // But user asked for copy capability. Does he want ONLY copy or BOTH?
+            // "je puisse copier les variable dans le presse papier" implies copy.
+            // The previous logic was "insert on change". This is conflicting if "change" triggers insert immediately.
+            // Let's change behavior: "change" -> Selects value but doesn't insert automatically if we want to copy?
+            // Or better: keep insert on change for convenience, but the copy button grabs the value BEFORE reset?
+            // Ah, the reset `$(this).val('')` clears it.
+            // Correction: Remove auto-insert on change. User selects, then clicks Insert or Copy.
+            // OR: Keep auto-insert but remove the reset?
+            // Most standard editors: Select from list -> Inserts immediately.
+            // To support Copy: We need a way to select without inserting.
+
+            // New Logic:
+            // 1. Change event: Does NOTHING but update internal state or just stay selected?
+            // If I remove auto-insert, existing users might be confused.
+            // Let's change the UI slightly:
+            // [ Select Variable ] [ Insert ] [ Copy ] ? Too cluttered.
+            // Current: [ Select (Change triggers insert) ] [ Copy ]
+            // If I click Copy, I haven't changed the select yet.
+            // So: User selects a variable. It stays selected. User can click "Copy". User can click "Insert" (we need an insert button?)
+
+            // Let's add an explicit "Insert" button to avoid accidental insertions and allow copying.
+
+            // Toolbar: Insert Variable Button
+            $(document).on('click', '.pw-insert-var-btn', function(e) {
+                e.preventDefault();
+                const $select = $(this).closest('.pw-toolbar-group').find('.pw-var-select');
+                const val = $select.val();
+                 if (val) {
+                    const $container = $(this).closest('.pw-variant-item');
+                    const $textarea = $container.find('textarea.pw-variant-input');
+                    if ($textarea.length) {
+                        TemplateEditor.insertAtCursor($textarea[0], val);
+                    }
+                } else {
+                    alert('Veuillez d\'abord sélectionner une variable dans la liste.');
+                    $select.focus();
+                }
+            });
+
+            // Toolbar: Copy Variable
+            $(document).on('click', '.pw-copy-var-btn', function(e) {
+                e.preventDefault();
+                const $select = $(this).closest('.pw-toolbar-group').find('.pw-var-select');
+                const val = $select.val();
+
+                if (val) {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(val);
+                    } else {
+                        const $temp = $('<textarea>').val(val).appendTo('body').select();
+                        document.execCommand('copy');
+                        $temp.remove();
+                    }
+
+                    const $btn = $(this);
+                    const originalHtml = $btn.html();
+                    $btn.html('<span class="dashicons dashicons-yes" style="font-size:14px; width:14px; height:14px; margin-top:3px; color:green;"></span>');
+                    setTimeout(() => $btn.html(originalHtml), 1500);
+                } else {
+                    alert('Sélectionnez une variable d\'abord.');
+                }
+            });
+
+            // Toolbar: Insert Spintax
+            $(document).on('click', '.pw-spintax-btn', function(e) {
+                e.preventDefault();
+                const $container = $(this).closest('.pw-variant-item');
+                const $textarea = $container.find('textarea.pw-variant-input');
+
+                if ($textarea.length) {
+                    TemplateEditor.insertAtCursor($textarea[0], '{ | }');
+                }
+            });
+
+            // Toolbar: Code / Preview Toggle
+            $(document).on('click', '.pw-toggle-btn', function(e) {
+                e.preventDefault();
+                const $btn = $(this);
+                if ($btn.hasClass('active')) return;
+
+                const mode = $btn.data('mode');
+                const $group = $btn.closest('.pw-view-toggle');
+                const $container = $btn.closest('.pw-variant-item');
+                const $editor = $container.find('.pw-variant-editor');
+                const $textarea = $editor.find('.pw-variant-input');
+                const $preview = $editor.find('.pw-variant-preview');
+
+                // Toggle buttons
+                $group.find('.pw-toggle-btn').removeClass('active');
+                $btn.addClass('active');
+
+                if (mode === 'preview') {
+                    let content = $textarea.val();
+
+                    // Simple HTML rendering.
+                    // Note: This does not process spintax or variables fully server-side,
+                    // it serves as a quick visual check for HTML structure.
+
+                    // If content is empty
+                    if (!content.trim()) {
+                        content = '<em style="color:#999">Contenu vide...</em>';
+                    } else {
+                        // Basic Spintax Highlighting (Optional visual aid)
+                        // content = content.replace(/\{([^{}]*)\}/g, '<span style="background:#fff3cd; padding:0 2px; border-radius:2px;" title="Spintax">{$1}</span>');
+
+                        // Render HTML
+                        // We rely on the browser's rendering.
+                        // IMPORTANT: For text content (not HTML), we might want to nl2br?
+                        // But the editor is generic.
+                    }
+
+                    $preview.html(content);
+                    $textarea.hide();
+                    $preview.show();
+                } else {
+                    $textarea.show();
+                    $preview.hide();
+                }
+            });
+        },
+
+        insertAtCursor(field, value) {
+            if (!field) return;
+
+            // Modern browsers support setRangeText
+            if (typeof field.setRangeText === 'function') {
+                field.setRangeText(value);
+                // Move cursor to end of inserted text
+                field.selectionStart = field.selectionEnd = field.selectionEnd + value.length;
+
+                // If inserting spintax, place cursor inside braces
+                if (value === '{ | }') {
+                    field.selectionStart = field.selectionEnd - 4; // Inside { | } -> { | }
+                }
+            } else {
+                // Fallback
+                if (document.selection) {
+                    field.focus();
+                    var sel = document.selection.createRange();
+                    sel.text = value;
+                } else if (field.selectionStart || field.selectionStart == '0') {
+                    var startPos = field.selectionStart;
+                    var endPos = field.selectionEnd;
+                    field.value = field.value.substring(0, startPos) + value + field.value.substring(endPos, field.value.length);
+                } else {
+                    field.value += value;
+                }
+            }
+
+            $(field).trigger('input').focus();
+        },
+
+        // Toolbar: Base64 Encode
+        bindBase64Events() {
+             $(document).on('click', '.pw-base64-btn', function() {
+                const $textarea = $(this).closest('.pw-variant-item').find('.pw-variant-input');
+                const val = $textarea.val();
+                if (val) {
+                    try {
+                        const encoded = btoa(unescape(encodeURIComponent(val)));
+                        $textarea.val(encoded).trigger('input');
+                    } catch (e) {
+                        alert('Erreur d\'encodage Base64.');
+                    }
+                }
+            });
+
+            $(document).on('click', '.pw-base64-decode-btn', function() {
+                const $textarea = $(this).closest('.pw-variant-item').find('.pw-variant-input');
+                const val = $textarea.val();
+                if (val) {
+                    try {
+                        const decoded = decodeURIComponent(escape(window.atob(val)));
+                        $textarea.val(decoded).trigger('input');
+                    } catch (e) {
+                        alert('Le contenu ne semble pas être en Base64 valide.');
+                    }
+                }
+            });
         },
 
         resetForm() {
@@ -813,8 +1084,12 @@
                         $('#pw-editor-tags').val(tagNames);
                     }
 
+                    // Load Default Label and Timezone (Fix)
+                    $('#pw-editor-default-label').val(tpl.default_label || '');
+                    $('#pw-editor-timezone').val(tpl.timezone || '');
+
                     // Load variants
-                    const variantTypes = ['subject', 'text', 'html', 'from_name', 'mailto_subject', 'mailto_body', 'mailto_from_name'];
+                    const variantTypes = ['subject', 'text', 'html', 'from_name', 'reply_to', 'mailto_subject', 'mailto_body', 'mailto_from_name'];
                     variantTypes.forEach(type => {
                         if (tpl[type] && Array.isArray(tpl[type])) {
                             tpl[type].forEach(val => this.addVariant(type, val));
@@ -826,6 +1101,38 @@
             } catch (error) {
                 console.error('Error loading template:', error);
             }
+        },
+
+        openBulkModal(type) {
+            this.currentBulkType = type;
+            $('#pw-bulk-add-textarea').val('');
+            $('#pw-bulk-add-modal').show();
+            // Show/Hide specific info based on type
+            if (['html', 'text'].includes(type)) {
+                $('.pw-bulk-info-text').show();
+            } else {
+                $('.pw-bulk-info-text').hide();
+            }
+            $('#pw-bulk-add-textarea').focus();
+        },
+
+        confirmBulkAdd() {
+            const content = $('#pw-bulk-add-textarea').val();
+            if (!content.trim()) return;
+
+            const type = this.currentBulkType;
+            let variants = [];
+
+            // Special handling for HTML/Text which might be multi-line
+            if (['html', 'text'].includes(type) && content.includes('---')) {
+                variants = content.split(/\n---\n|---\n|\n---/g).map(v => v.trim()).filter(v => v);
+            } else {
+                // Default: line by line
+                variants = content.split('\n').map(v => v.trim()).filter(v => v);
+            }
+
+            variants.forEach(val => this.addVariant(type, val));
+            $('#pw-bulk-add-modal').hide();
         },
 
         addVariant(type, value = '') {
@@ -888,32 +1195,76 @@
      * Template Preview Logic
      */
     const TemplatePreview = {
+        currentTemplate: null,
+        currentTemplateName: null,
+
         open(templateName) {
             const $modal = $('#pw-template-preview-modal');
             $('#pw-preview-title').text('Aperçu : ' + templateName);
-            this.loadPreview(templateName);
+
+            this.currentTemplateName = templateName;
+            this.loadPreview();
+
             $modal.show();
+
+            // Bind context change
+            $('#pw-preview-context').off('change').on('change', () => {
+                this.renderCurrent();
+            });
         },
 
-        async loadPreview(name) {
-            // Simplified preview for demo
+        async loadPreview() {
             try {
                 const response = await $.post(pwAdmin.ajaxurl, {
                     action: 'pw_get_template',
                     nonce: pwAdmin.nonce,
-                    name: name
+                    name: this.currentTemplateName
                 });
                 if (response.success) {
-                    const tpl = response.data;
-                    $('#pw-preview-from').text(tpl.from_name[0] || '');
-                    $('#pw-preview-subject').text(tpl.subject[0] || '');
-                    
-                    const $iframe = $('#pw-preview-frame');
-                    const html = tpl.html[0] || tpl.text[0] || '';
-                    $iframe.contents().find('body').html(html);
+                    this.currentTemplate = response.data;
+                    this.renderCurrent();
                 }
             } catch (error) {
                 console.error('Preview error:', error);
+            }
+        },
+
+        async renderCurrent() {
+            if (!this.currentTemplate) return;
+
+            const contextType = $('#pw-preview-context').val();
+
+            // Pick first variants
+            const subjectRaw = this.currentTemplate.subject[0] || '';
+            const htmlRaw = this.currentTemplate.html[0] || this.currentTemplate.text[0] || '';
+            const fromRaw = this.currentTemplate.from_name[0] || '';
+
+            $('#pw-preview-subject').html('<i>Chargement...</i>');
+            $('#pw-preview-from').html('<i>Chargement...</i>');
+
+            // Parallel render
+            Promise.all([
+                this.apiRender(subjectRaw, contextType),
+                this.apiRender(fromRaw, contextType),
+                this.apiRender(htmlRaw, contextType)
+            ]).then(([subject, from, html]) => {
+                $('#pw-preview-subject').text(subject);
+                $('#pw-preview-from').text(from);
+                $('#pw-preview-frame').contents().find('body').html(html);
+            });
+        },
+
+        async apiRender(content, contextType) {
+            try {
+                const response = await $.post(pwAdmin.ajaxurl, {
+                    action: 'pw_render_preview',
+                    nonce: pwAdmin.nonce,
+                    content: content,
+                    context_type: contextType
+                });
+                return response.success ? response.data.rendered : content;
+            } catch (e) {
+                return content;
             }
         }
     };
@@ -1005,10 +1356,87 @@
                 TemplateEditor.addVariant($(this).data('type'));
             });
 
+            // Bulk Add Triggers
+            $('.pw-bulk-add-btn').on('click', function() {
+                TemplateEditor.openBulkModal($(this).data('type'));
+            });
+
+            $('#pw-bulk-add-confirm').on('click', function() {
+                TemplateEditor.confirmBulkAdd();
+            });
+
             $('#pw-save-template-btn').on('click', function() {
                 TemplateEditor.save();
             });
             $('#pw-save-category-btn').on('click', () => CategoryManager.save());
+
+            // --- IMPORT / EXPORT LOGIC ---
+
+            // Export
+            $(document).on('click', '.pw-export-btn', function(e) {
+                e.preventDefault();
+                const $card = $(this).closest('.pw-template-card');
+                const name = $card.data('template-name');
+                if (!name) return;
+
+                // Trigger download via iframe or direct location
+                // We use a hidden form to POST if needed, but here simple GET or POST with location is enough if not too large.
+                // Actually, AJAX download is tricky. Best is to open new tab or location.href with query params if GET.
+                // But our AjaxHandler expects POST for 'pw_export_template'.
+                // So we create a form dynamically.
+
+                const $form = $('<form action="' + pwAdmin.ajaxurl + '" method="post" target="_blank">' +
+                    '<input type="hidden" name="action" value="pw_export_template">' +
+                    '<input type="hidden" name="nonce" value="' + pwAdmin.nonce + '">' +
+                    '<input type="hidden" name="name" value="' + name + '">' +
+                    '</form>');
+                $('body').append($form);
+                $form.submit().remove();
+            });
+
+            // Import Button Click
+            $('#pw-import-btn').on('click', function(e) {
+                e.preventDefault();
+                $('#pw-import-file').click();
+            });
+
+            // Import File Change
+            $('#pw-import-file').on('change', function(e) {
+                const file = this.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append('action', 'pw_import_templates');
+                formData.append('nonce', pwAdmin.nonce);
+                formData.append('file', file);
+
+                const $btn = $('#pw-import-btn');
+                const oldText = $btn.html();
+                $btn.prop('disabled', true).html('<span class="spinner is-active" style="float:none; margin:0 5px 0 0;"></span> Import...');
+
+                $.ajax({
+                    url: pwAdmin.ajaxurl,
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        if (response.success) {
+                            alert(response.data.message || 'Import réussi !');
+                            location.reload();
+                        } else {
+                            alert('Erreur : ' + (response.data.message || 'Format invalide'));
+                        }
+                    },
+                    error: function() {
+                        alert('Erreur réseau lors de l\'import.');
+                    },
+                    complete: function() {
+                        $btn.prop('disabled', false).html(oldText);
+                        $('#pw-import-file').val(''); // Reset
+                    }
+                });
+            });
         } 
     }); 
      

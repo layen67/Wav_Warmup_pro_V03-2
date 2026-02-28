@@ -7,14 +7,14 @@ namespace Composer\Autoload;
 class ComposerStaticInit8e43c76ea618e4ad7eeb441a8d192dc9
 {
     public static $prefixLengthsPsr4 = array (
-        'P' => 
+        'P' =>
         array (
             'PostalWarmup\\' => 13,
         ),
     );
 
     public static $prefixDirsPsr4 = array (
-        'PostalWarmup\\' => 
+        'PostalWarmup\\' =>
         array (
             0 => __DIR__ . '/../..' . '/src',
         ),
@@ -22,32 +22,40 @@ class ComposerStaticInit8e43c76ea618e4ad7eeb441a8d192dc9
 
     public static $classMap = array (
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
-        'PW_Activator' => __DIR__ . '/../..' . '/includes/class-pw-activator.php',
-        'PW_Admin' => __DIR__ . '/../..' . '/admin/class-pw-admin.php',
-        'PW_Cache' => __DIR__ . '/../..' . '/includes/class-pw-cache.php',
-        'PW_Database' => __DIR__ . '/../..' . '/includes/class-pw-database.php',
-        'PW_Deactivator' => __DIR__ . '/../..' . '/includes/class-pw-deactivator.php',
-        'PW_Email_Notifications' => __DIR__ . '/../..' . '/includes/class-pw-email-notifications.php',
-        'PW_Loader' => __DIR__ . '/../..' . '/includes/class-pw-loader.php',
-        'PW_Logger' => __DIR__ . '/../..' . '/includes/class-pw-logger.php',
-        'PW_Logs_List_Table' => __DIR__ . '/../..' . '/admin/class-pw-logs-list-table.php',
-        'PW_Postal_API' => __DIR__ . '/../..' . '/includes/class-pw-postal-api.php',
-        'PW_Postal_Sender' => __DIR__ . '/../..' . '/includes/class-pw-postal-sender.php',
-        'PW_Public' => __DIR__ . '/../..' . '/public/class-pw-public.php',
-        'PW_Servers_List_Table' => __DIR__ . '/../..' . '/admin/class-pw-servers-list-table.php',
-        'PW_Settings' => __DIR__ . '/../..' . '/admin/class-pw-settings.php',
-        'PW_Shortcodes' => __DIR__ . '/../..' . '/public/class-pw-shortcodes.php',
-        'PW_Stats' => __DIR__ . '/../..' . '/includes/class-pw-stats.php',
-        'PW_Template_Loader' => __DIR__ . '/../..' . '/includes/class-pw-template-loader.php',
-        'PW_Template_Manager' => __DIR__ . '/../..' . '/admin/class-pw-template-manager.php',
-        'PW_Template_Storage' => __DIR__ . '/../..' . '/includes/class-pw-template-storage.php',
-        'PW_Template_Sync' => __DIR__ . '/../..' . '/includes/class-pw-template-sync.php',
-        'PW_Warmup_Mailto' => __DIR__ . '/../..' . '/includes/class-pw-warmup-mailto.php',
-        'PW_Webhook_Handler' => __DIR__ . '/../..' . '/includes/class-pw-webhook-handler.php',
-        'PW_i18n' => __DIR__ . '/../..' . '/includes/class-pw-i18n.php',
-        'PostalWarmup\\Enums\\LogLevel' => __DIR__ . '/../..' . '/includes/enums/class-pw-log-level.php',
-        'Postal_Warmup' => __DIR__ . '/../..' . '/includes/class-postal-warmup.php',
-        'Postal_Warmup_Admin' => __DIR__ . '/../..' . '/admin/class-postal-warmup-admin.php',
+        'PostalWarmup\\API\\Client' => __DIR__ . '/../..' . '/src/API/Client.php',
+        'PostalWarmup\\API\\Sender' => __DIR__ . '/../..' . '/src/API/Sender.php',
+        'PostalWarmup\\API\\WebhookHandler' => __DIR__ . '/../..' . '/src/API/WebhookHandler.php',
+        'PostalWarmup\\Admin\\Admin' => __DIR__ . '/../..' . '/src/Admin/Admin.php',
+        'PostalWarmup\\Admin\\AjaxHandler' => __DIR__ . '/../..' . '/src/Admin/AjaxHandler.php',
+        'PostalWarmup\\Admin\\ISPManager' => __DIR__ . '/../..' . '/src/Admin/ISPManager.php',
+        'PostalWarmup\\Admin\\Settings' => __DIR__ . '/../..' . '/src/Admin/Settings.php',
+        'PostalWarmup\\Admin\\StrategyManager' => __DIR__ . '/../..' . '/src/Admin/StrategyManager.php',
+        'PostalWarmup\\Admin\\TemplateManager' => __DIR__ . '/../..' . '/src/Admin/TemplateManager.php',
+        'PostalWarmup\\Admin\\WarmupSettings' => __DIR__ . '/../..' . '/src/Admin/WarmupSettings.php',
+        'PostalWarmup\\Core\\Activator' => __DIR__ . '/../..' . '/src/Core/Activator.php',
+        'PostalWarmup\\Core\\Deactivator' => __DIR__ . '/../..' . '/src/Core/Deactivator.php',
+        'PostalWarmup\\Core\\Loader' => __DIR__ . '/../..' . '/src/Core/Loader.php',
+        'PostalWarmup\\Core\\Plugin' => __DIR__ . '/../..' . '/src/Core/Plugin.php',
+        'PostalWarmup\\Core\\TemplateEngine' => __DIR__ . '/../..' . '/src/Core/TemplateEngine.php',
+        'PostalWarmup\\Core\\i18n' => __DIR__ . '/../..' . '/src/Core/i18n.php',
+        'PostalWarmup\\Models\\Database' => __DIR__ . '/../..' . '/src/Models/Database.php',
+        'PostalWarmup\\Models\\Stats' => __DIR__ . '/../..' . '/src/Models/Stats.php',
+        'PostalWarmup\\Models\\Strategy' => __DIR__ . '/../..' . '/src/Models/Strategy.php',
+        'PostalWarmup\\Services\\Cache' => __DIR__ . '/../..' . '/src/Services/Cache.php',
+        'PostalWarmup\\Services\\DomScanService' => __DIR__ . '/../..' . '/src/Services/DomScanService.php',
+        'PostalWarmup\\Services\\EmailNotifications' => __DIR__ . '/../..' . '/src/Services/EmailNotifications.php',
+        'PostalWarmup\\Services\\Encryption' => __DIR__ . '/../..' . '/src/Services/Encryption.php',
+        'PostalWarmup\\Services\\HealthScoreCalculator' => __DIR__ . '/../..' . '/src/Services/HealthScoreCalculator.php',
+        'PostalWarmup\\Services\\ISPDetector' => __DIR__ . '/../..' . '/src/Services/ISPDetector.php',
+        'PostalWarmup\\Services\\LoadBalancer' => __DIR__ . '/../..' . '/src/Services/LoadBalancer.php',
+        'PostalWarmup\\Services\\Logger' => __DIR__ . '/../..' . '/src/Services/Logger.php',
+        'PostalWarmup\\Services\\Mailto' => __DIR__ . '/../..' . '/src/Services/Mailto.php',
+        'PostalWarmup\\Services\\QueueManager' => __DIR__ . '/../..' . '/src/Services/QueueManager.php',
+        'PostalWarmup\\Services\\StrategyEngine' => __DIR__ . '/../..' . '/src/Services/StrategyEngine.php',
+        'PostalWarmup\\Services\\TemplateLoader' => __DIR__ . '/../..' . '/src/Services/TemplateLoader.php',
+        'PostalWarmup\\Services\\TemplateSync' => __DIR__ . '/../..' . '/src/Services/TemplateSync.php',
+        'PostalWarmup\\Services\\WarmupAdvisor' => __DIR__ . '/../..' . '/src/Services/WarmupAdvisor.php',
+        'PostalWarmup\\Services\\WebhookDispatcher' => __DIR__ . '/../..' . '/src/Services/WebhookDispatcher.php',
     );
 
     public static function getInitializer(ClassLoader $loader)

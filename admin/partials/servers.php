@@ -1,527 +1,201 @@
 <?php
 /**
- * Vue de gestion des serveurs - VERSION SÉCURISÉE API KEY
- * La clé API n'est JAMAIS affichée, seulement modifiable via modal
+ * Vue des serveurs (Modernized)
  */
+
+use PostalWarmup\Models\Database;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Récupérer l'action
-$action = isset($_GET['action']) ? sanitize_text_field($_GET['action']) : '';
-$server_id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+$search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
+$action = isset($_GET['action']) ? sanitize_key($_GET['action']) : '';
+$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
-// Traitement des actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Handle CRUD Logic here for simplicity, or move to Controller
+if ($action === 'delete' && $id > 0 && check_admin_referer('pw_delete_server_' . $id)) {
+    if (Database::delete_server($id)) {
+        echo '<div class="notice notice-success is-dismissible"><p>Serveur supprimé.</p></div>';
+    } else {
+        echo '<div class="notice notice-error is-dismissible"><p>Erreur lors de la suppression.</p></div>';
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_admin_referer('pw_save_server')) {
+    $data = [
+        'domain' => sanitize_text_field($_POST['domain']),
+        'api_url' => esc_url_raw($_POST['api_url']),
+        'api_key' => sanitize_text_field($_POST['api_key']),
+        'active' => isset($_POST['active']) ? 1 : 0,
+        'daily_limit' => (int)$_POST['daily_limit'],
+        'priority' => (int)$_POST['priority'],
+    ];
     
-    check_admin_referer('pw_server_action');
-    
-    if (isset($_POST['pw_add_server'])) {
-        // Ajout d'un serveur
-        $domain = sanitize_text_field($_POST['domain']);
-        $api_url = esc_url_raw($_POST['api_url']);
-        $api_key = sanitize_text_field($_POST['api_key']);
-        $active = !empty($_POST['active']) ? 1 : 0;
-        $daily_limit = isset($_POST['daily_limit']) ? (int)$_POST['daily_limit'] : 0;
-        $priority = isset($_POST['priority']) ? (int)$_POST['priority'] : 10;
-        $timezone = sanitize_text_field($_POST['timezone']);
-        
-        if ($domain && $api_url && $api_key) {
-            $result = PW_Database::insert_server(array(
-                'domain' => $domain,
-                'api_url' => $api_url,
-                'api_key' => $api_key,
-                'active' => $active,
-                'daily_limit' => $daily_limit,
-                'priority' => $priority,
-                'timezone' => $timezone
-            ));
-            
-            if ($result) {
-                echo '<div class="notice notice-success is-dismissible"><p>' . __('Serveur ajouté avec succès.', 'postal-warmup') . '</p></div>';
-                $action = '';
-            } else {
-                echo '<div class="notice notice-error is-dismissible"><p>' . __('Erreur lors de l\'ajout du serveur.', 'postal-warmup') . '</p></div>';
-            }
+    if ($id > 0) {
+        // Update
+        if (empty($data['api_key'])) unset($data['api_key']); // Don't overwrite if empty
+        if (Database::update_server($id, $data)) {
+            echo '<div class="notice notice-success is-dismissible"><p>Serveur mis à jour.</p></div>';
+        }
+    } else {
+        // Create
+        if (Database::insert_server($data)) {
+            echo '<div class="notice notice-success is-dismissible"><p>Serveur ajouté.</p></div>';
+            $action = ''; // Return to list
         } else {
-            echo '<div class="notice notice-error is-dismissible"><p>' . __('Veuillez remplir tous les champs obligatoires.', 'postal-warmup') . '</p></div>';
-        }
-    }
-    
-    if (isset($_POST['pw_edit_server']) && $server_id) {
-        // Modification d'un serveur
-        $domain = sanitize_text_field($_POST['domain']);
-        $api_url = esc_url_raw($_POST['api_url']);
-        $active = !empty($_POST['active']) ? 1 : 0;
-        $daily_limit = isset($_POST['daily_limit']) ? (int)$_POST['daily_limit'] : 0;
-        $priority = isset($_POST['priority']) ? (int)$_POST['priority'] : 10;
-        $timezone = sanitize_text_field($_POST['timezone']);
-        
-        $data = array(
-            'domain' => $domain,
-            'api_url' => $api_url,
-            'active' => $active,
-            'daily_limit' => $daily_limit,
-            'priority' => $priority,
-            'timezone' => $timezone
-        );
-        
-        // ⭐ SÉCURITÉ : Ne mettre à jour la clé QUE si une nouvelle est fournie
-        if (!empty($_POST['api_key_modified']) && $_POST['api_key_modified'] === '1') {
-            $new_api_key = sanitize_text_field($_POST['api_key_new']);
-            if (!empty($new_api_key)) {
-                $data['api_key'] = $new_api_key;
-                PW_Logger::warning("Clé API modifiée pour le serveur #$server_id");
-            }
-        }
-        
-        if ($domain && $api_url) {
-            $result = PW_Database::update_server($server_id, $data);
-            
-            if ($result !== false) {
-                echo '<div class="notice notice-success is-dismissible"><p>' . __('Serveur mis à jour avec succès.', 'postal-warmup') . '</p></div>';
-                if (!empty($data['api_key'])) {
-                    echo '<div class="notice notice-info is-dismissible"><p>🔑 ' . __('La clé API a été changée.', 'postal-warmup') . '</p></div>';
-                }
-                $action = '';
-            } else {
-                echo '<div class="notice notice-error is-dismissible"><p>' . __('Erreur lors de la mise à jour du serveur.', 'postal-warmup') . '</p></div>';
-            }
+            echo '<div class="notice notice-error is-dismissible"><p>Erreur lors de l\'ajout.</p></div>';
         }
     }
 }
 
-// Suppression
-if ($action === 'delete' && $server_id) {
-    check_admin_referer('pw_delete_server_' . $server_id);
-    
-    if (PW_Database::delete_server($server_id)) {
-        echo '<div class="notice notice-success is-dismissible"><p>' . __('Serveur supprimé avec succès.', 'postal-warmup') . '</p></div>';
-        $action = '';
-    }
-}
-
+// EDIT / ADD VIEW
+if ($action === 'add' || ($action === 'edit' && $id > 0)):
+    $server = ($id > 0) ? Database::get_server($id) : [];
+    $title = ($id > 0) ? 'Modifier le serveur' : 'Ajouter un serveur';
 ?>
+<div class="wrap pw-settings-page">
+    <h1><?php echo esc_html($title); ?></h1>
 
-<div class="wrap">
-    <h1>
-        <?php _e('Serveurs Postal', 'postal-warmup'); ?>
-        <?php if ($action !== 'add' && $action !== 'edit') { ?>
-            <a href="<?php echo admin_url('admin.php?page=postal-warmup-servers&action=add'); ?>" class="page-title-action">
-                <?php _e('Ajouter un serveur', 'postal-warmup'); ?>
-            </a>
-        <?php } ?>
-    </h1>
-    
-    <?php if ($action === 'add') { ?>
-        <!-- Formulaire d'ajout -->
-        <div class="pw-form-section">
-            <h2><?php _e('Ajouter un serveur Postal', 'postal-warmup'); ?></h2>
-            <form method="post" id="pw-server-form">
-                <?php wp_nonce_field('pw_server_action'); ?>
-                <table class="form-table">
-                    <tr>
-                        <th scope="row">
-                            <label for="domain"><?php _e('Domaine', 'postal-warmup'); ?> *</label>
-                        </th>
-                        <td>
-                            <input type="text" 
-                                   id="domain" 
-                                   name="domain" 
-                                   class="regular-text" 
-                                   required 
-                                   placeholder="check.example.com">
-                            <p class="description">
-                                <?php _e('Le domaine configuré dans Postal (ex: check.example.com)', 'postal-warmup'); ?>
-                            </p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="api_url"><?php _e('API URL', 'postal-warmup'); ?> *</label>
-                        </th>
-                        <td>
-                            <input type="url" 
-                                   id="api_url" 
-                                   name="api_url" 
-                                   class="regular-text" 
-                                   required 
-                                   placeholder="https://postal.example.com/api/v1">
-                            <p class="description">
-                                <?php _e('URL de l\'API Postal (doit se terminer par /api/v1)', 'postal-warmup'); ?>
-                            </p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="api_key"><?php _e('API Key', 'postal-warmup'); ?> *</label>
-                        </th>
-                        <td>
-                            <input type="text" 
-                                   id="api_key" 
-                                   name="api_key" 
-                                   class="regular-text" 
-                                   required 
-                                   placeholder="server-xxxxxxxxxxxxxxxxxxxxx">
-                            <p class="description">
-                                <?php _e('Clé API serveur Postal (Settings > Credentials)', 'postal-warmup'); ?>
-                            </p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="daily_limit"><?php _e('Limite Quotidienne', 'postal-warmup'); ?></label>
-                        </th>
-                        <td>
-                            <input type="number" id="daily_limit" name="daily_limit" class="small-text" value="<?php echo esc_attr($server['daily_limit']); ?>">
-                            <p class="description"><?php _e('0 = Illimité. Emails max par jour.', 'postal-warmup'); ?></p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="priority"><?php _e('Priorité', 'postal-warmup'); ?></label>
-                        </th>
-                        <td>
-                            <input type="number" id="priority" name="priority" class="small-text" value="<?php echo esc_attr($server['priority']); ?>">
-                            <p class="description"><?php _e('Plus haut = prioritaire. Défaut : 10.', 'postal-warmup'); ?></p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="timezone"><?php _e('Fuseau Horaire', 'postal-warmup'); ?></label>
-                        </th>
-                        <td>
-                            <select id="timezone" name="timezone">
-                                <option value="UTC" <?php selected($server['timezone'], 'UTC'); ?>>UTC</option>
-                                <?php foreach (timezone_identifiers_list() as $tz) { 
-                                    echo '<option value="' . esc_attr($tz) . '" ' . selected($server['timezone'], $tz, false) . '>' . esc_html($tz) . '</option>';
-                                } ?>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><?php _e('Statut', 'postal-warmup'); ?></th>
-                        <td>
-                            <label>
-                                <input type="checkbox" name="active" value="1" checked>
-                                <?php _e('Serveur actif', 'postal-warmup'); ?>
-                            </label>
-                        </td>
-                    </tr>
-                </table>
-                <p class="submit">
-                    <button type="submit" name="pw_add_server" class="button button-primary">
-                        <?php _e('Ajouter le serveur', 'postal-warmup'); ?>
-                    </button>
-                    <a href="<?php echo admin_url('admin.php?page=postal-warmup-servers'); ?>" class="button">
-                        <?php _e('Annuler', 'postal-warmup'); ?>
-                    </a>
-                </p>
-            </form>
-        </div>
-        
-    <?php } elseif ($action === 'edit' && $server_id) { ?>
-        <!-- Formulaire d'édition -->
-        <?php
-        $server = PW_Database::get_server($server_id);
-        if (!$server) {
-            echo '<div class="notice notice-error"><p>' . __('Serveur introuvable.', 'postal-warmup') . '</p></div>';
-        } else {
-        ?>
-        <div class="pw-form-section">
-            <h2><?php _e('Modifier le serveur', 'postal-warmup'); ?></h2>
-            <form method="post" id="pw-server-form">
-                <?php wp_nonce_field('pw_server_action'); ?>
-                
-                <!-- Champs cachés pour la gestion de la clé API -->
-                <input type="hidden" name="api_key_modified" id="api_key_modified" value="0">
-                <input type="hidden" name="api_key_new" id="api_key_new" value="">
-                
-                <table class="form-table">
-                    <tr>
-                        <th scope="row">
-                            <label for="domain"><?php _e('Domaine', 'postal-warmup'); ?> *</label>
-                        </th>
-                        <td>
-                            <input type="text" 
-                                   id="domain" 
-                                   name="domain" 
-                                   class="regular-text" 
-                                   required 
-                                   value="<?php echo esc_attr($server['domain']); ?>">
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="api_url"><?php _e('API URL', 'postal-warmup'); ?> *</label>
-                        </th>
-                        <td>
-                            <input type="url" 
-                                   id="api_url" 
-                                   name="api_url" 
-                                   class="regular-text" 
-                                   required 
-                                   value="<?php echo esc_attr($server['api_url']); ?>">
-                        </td>
-                    </tr>
-                    
-                    <!-- ⭐ SÉCURITÉ MAXIMALE : Clé API masquée -->
-                    <tr>
-                        <th scope="row">
-                            <label><?php _e('API Key', 'postal-warmup'); ?></label>
-                        </th>
-                        <td>
-                            <div class="pw-api-key-secure">
-                                <!-- Affichage masqué -->
-                                <input type="password" 
-                                       value="••••••••••••••••••••••••••••••••••••••••" 
-                                       class="regular-text" 
-                                       readonly 
-                                       disabled
-                                       style="background: #f6f7f7; cursor: not-allowed;">
-                                
-                                <!-- Bouton pour changer -->
-                                <button type="button" 
-                                        class="button" 
-                                        id="pw-change-api-key-btn"
-                                        style="margin-top: 10px;">
-                                    <span class="dashicons dashicons-lock" style="margin-top: 3px;"></span>
-                                    <?php _e('Changer la clé API', 'postal-warmup'); ?>
-                                </button>
-                                
-                                <!-- Message de sécurité -->
-                                <p class="description" style="margin-top: 10px;">
-                                    <span class="dashicons dashicons-shield" style="color: #46b450;"></span>
-                                    <strong><?php _e('Sécurité renforcée :', 'postal-warmup'); ?></strong>
-                                    <?php _e('La clé API actuelle n\'est jamais affichée. Vous pouvez uniquement la remplacer par une nouvelle.', 'postal-warmup'); ?>
-                                </p>
-                            </div>
-                        </td>
-                    </tr>
-                    
-                    <tr>
-                        <th scope="row"><?php _e('Statut', 'postal-warmup'); ?></th>
-                        <td>
-                            <label>
-                                <input type="checkbox" name="active" value="1" <?php checked($server['active'], 1); ?>>
-                                <?php _e('Serveur actif', 'postal-warmup'); ?>
-                            </label>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><?php _e('Statistiques', 'postal-warmup'); ?></th>
-                        <td>
-                            <p>
-                                <strong><?php _e('Emails envoyés :', 'postal-warmup'); ?></strong> 
-                                <?php echo number_format_i18n($server['sent_count']); ?>
-                            </p>
-                            <p>
-                                <strong><?php _e('Succès :', 'postal-warmup'); ?></strong> 
-                                <?php echo number_format_i18n($server['success_count']); ?>
-                            </p>
-                            <p>
-                                <strong><?php _e('Erreurs :', 'postal-warmup'); ?></strong> 
-                                <?php echo number_format_i18n($server['error_count']); ?>
-                            </p>
-                            <?php 
-                            if (!empty($server['last_used'])) {
-                                $last_used_timestamp = strtotime($server['last_used']);
-                                $date_format = get_option('date_format') . ' ' . get_option('time_format');
-                                $formatted_date = date_i18n($date_format, $last_used_timestamp);
-                            ?>
-                                <p>
-                                    <strong><?php _e('Dernière utilisation :', 'postal-warmup'); ?></strong> 
-                                    <?php echo $formatted_date; ?>
-                                </p>
-                            <?php } ?>
-                        </td>
-                    </tr>
-                </table>
-                <p class="submit">
-                    <button type="submit" name="pw_edit_server" class="button button-primary">
-                        <?php _e('Mettre à jour', 'postal-warmup'); ?>
-                    </button>
-                    <button type="button" class="button pw-test-server-btn" data-server-id="<?php echo $server['id']; ?>">
-                        <?php _e('Tester la connexion', 'postal-warmup'); ?>
-                    </button>
-                    <a href="<?php echo admin_url('admin.php?page=postal-warmup-servers'); ?>" class="button">
-                        <?php _e('Retour', 'postal-warmup'); ?>
-                    </a>
-                </p>
-            </form>
-        </div>
-        <?php } ?>
-        
-    <?php } else { ?>
-        <!-- Liste des serveurs -->
-        <?php
-        $servers = PW_Database::get_servers();
-        ?>
-        <div class="pw-servers-list">
-            <?php if (empty($servers)) { ?>
-                <div class="pw-no-data">
-                    <span class="dashicons dashicons-email-alt"></span>
-                    <p><?php _e('Aucun serveur configuré.', 'postal-warmup'); ?></p>
-                    <a href="<?php echo admin_url('admin.php?page=postal-warmup-servers&action=add'); ?>" class="button button-primary">
-                        <?php _e('Ajouter votre premier serveur', 'postal-warmup'); ?>
-                    </a>
+    <div class="pw-card" style="max-width: 600px;">
+        <div class="pw-card-body">
+            <form method="post" action="">
+                <?php wp_nonce_field('pw_save_server'); ?>
+
+                <div class="pw-form-group">
+                    <label>Domaine</label>
+                    <input type="text" name="domain" value="<?php echo esc_attr($server['domain'] ?? ''); ?>" required class="large-text">
+                    <p class="description">Le domaine configuré dans Postal.</p>
                 </div>
-            <?php } else { ?>
-                <table class="wp-list-table widefat fixed striped">
-                    <thead>
-                        <tr>
-                            <th><?php _e('Domaine', 'postal-warmup'); ?></th>
-                            <th><?php _e('Utilisation Jour', 'postal-warmup'); ?></th>
-                            <th><?php _e('Priorité', 'postal-warmup'); ?></th>
-                            <th><?php _e('Statut', 'postal-warmup'); ?></th>
-                            <th><?php _e('Total', 'postal-warmup'); ?></th>
-                            <th><?php _e('Succès', 'postal-warmup'); ?></th>
-                            <th><?php _e('Actions', 'postal-warmup'); ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php 
-                        foreach ($servers as $server) {
-                            $success_rate = 0;
-                            if (isset($server['sent_count']) && $server['sent_count'] > 0) {
-                                $success_rate = round(($server['success_count'] / $server['sent_count']) * 100, 2);
-                            }
-                            
-                            $badge_class = 'error';
-                            if ($success_rate >= 90) {
-                                $badge_class = 'success';
-                            } elseif ($success_rate >= 70) {
-                                $badge_class = 'warning';
-                            }
 
-                            // Calculate Daily Usage
-                            $daily_used = \PostalWarmup\Models\Stats::get_server_daily_usage($server['id']);
-                            $daily_limit = \PostalWarmup\Models\Stats::get_dynamic_limit($server);
-                            $usage_pct = ($daily_limit > 0) ? round(($daily_used / $daily_limit) * 100) : 0;
-                            $limit_display = ($daily_limit > 0) ? $daily_limit : '∞';
-                            
-                            $delete_url = wp_nonce_url(
-                                admin_url('admin.php?page=postal-warmup-servers&action=delete&id=' . $server['id']), 
-                                'pw_delete_server_' . $server['id']
-                            );
-                            $delete_msg = esc_js(__('Êtes-vous sûr de vouloir supprimer ce serveur ?', 'postal-warmup'));
-                        ?>
-                            <tr>
-                                <td>
-                                    <strong><?php echo esc_html($server['domain']); ?></strong>
-                                    <div style="font-size:11px; color:#666;"><?php echo esc_html($server['timezone'] ?: 'UTC'); ?></div>
-                                </td>
-                                <td>
-                                    <strong><?php echo $daily_used; ?></strong> <small>(Total Aujourd'hui)</small>
-                                    <br><small style="color:#888"><?php _e('Géré par Stratégie/ISP', 'postal-warmup'); ?></small>
-                                </td>
-                                <td><?php echo isset($server['priority']) ? $server['priority'] : 10; ?></td>
-                                <td>
-                                    <?php if ($server['active']) { ?>
-                                        <span class="pw-badge success">
-                                            <span class="dashicons dashicons-yes-alt"></span>
-                                            <?php _e('Actif', 'postal-warmup'); ?>
-                                        </span>
-                                    <?php } else { ?>
-                                        <span class="pw-badge error">
-                                            <span class="dashicons dashicons-dismiss"></span>
-                                            <?php _e('Inactif', 'postal-warmup'); ?>
-                                        </span>
-                                    <?php } ?>
-                                </td>
-                                <td><?php echo number_format_i18n($server['sent_count']); ?></td>
-                                <td><?php echo number_format_i18n($server['success_count']); ?></td>
-                                <td>
-                                    <span class="pw-badge <?php echo $badge_class; ?>">
-                                        <?php echo $success_rate; ?>%
-                                    </span>
-                                </td>
-                                <td>
-                                    <div class="pw-server-actions">
-                                        <a href="<?php echo admin_url('admin.php?page=postal-warmup-servers&action=edit&id=' . $server['id']); ?>" class="button button-small">
-                                            <?php _e('Modifier', 'postal-warmup'); ?>
-                                        </a>
-                                        <button type="button" class="button button-small pw-test-server-btn" data-server-id="<?php echo $server['id']; ?>">
-                                            <?php _e('Tester', 'postal-warmup'); ?>
-                                        </button>
-                                        <a href="<?php echo $delete_url; ?>" 
-                                           class="button button-small button-link-delete" 
-                                           onclick="return confirm('<?php echo $delete_msg; ?>');">
-                                            <?php _e('Supprimer', 'postal-warmup'); ?>
-                                        </a>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php } ?>
-                    </tbody>
-                </table>
-            <?php } ?>
-        </div>
-    <?php } ?>
-</div>
-
-<!-- ⭐ MODAL DE CHANGEMENT DE CLÉ API -->
-<div id="pw-api-key-modal" class="pw-modal" style="display: none;">
-    <div class="pw-modal-overlay"></div>
-    <div class="pw-modal-content">
-        <div class="pw-modal-header">
-            <h2>
-                <span class="dashicons dashicons-lock" style="color: #f0b849;"></span>
-                <?php _e('Changer la clé API', 'postal-warmup'); ?>
-            </h2>
-            <button type="button" class="pw-modal-close" id="pw-modal-close">
-                <span class="dashicons dashicons-no-alt"></span>
-            </button>
-        </div>
-        
-        <div class="pw-modal-body">
-            <div class="pw-modal-warning">
-                <span class="dashicons dashicons-warning" style="color: #f0b849; font-size: 20px;"></span>
-                <div>
-                    <strong><?php _e('Attention :', 'postal-warmup'); ?></strong>
-                    <?php _e('Cette action remplacera définitivement la clé API actuelle. Assurez-vous d\'avoir la nouvelle clé à portée de main.', 'postal-warmup'); ?>
+                <div class="pw-form-group">
+                    <label>API URL</label>
+                    <input type="url" name="api_url" value="<?php echo esc_attr($server['api_url'] ?? ''); ?>" required class="large-text">
+                    <p class="description">L'URL de votre instance Postal (ex: https://postal.example.com).</p>
                 </div>
-            </div>
-            
-            <div class="pw-modal-field">
-                <label for="pw-new-api-key">
-                    <?php _e('Nouvelle clé API :', 'postal-warmup'); ?> *
-                </label>
-                <input type="text" 
-                       id="pw-new-api-key" 
-                       class="regular-text" 
-                       placeholder="server-xxxxxxxxxxxxxxxxxxxxx"
-                       autocomplete="off">
-                <p class="description">
-                    <?php _e('Copiez la nouvelle clé depuis Postal > Settings > Credentials', 'postal-warmup'); ?>
-                </p>
-            </div>
-            
-            <div class="pw-modal-field">
-                <label for="pw-confirm-api-key">
-                    <?php _e('Confirmer la clé API :', 'postal-warmup'); ?> *
-                </label>
-                <input type="text" 
-                       id="pw-confirm-api-key" 
-                       class="regular-text" 
-                       placeholder="server-xxxxxxxxxxxxxxxxxxxxx"
-                       autocomplete="off">
-                <p class="description">
-                    <?php _e('Saisissez à nouveau la clé pour confirmation', 'postal-warmup'); ?>
-                </p>
-            </div>
-        </div>
-        
-        <div class="pw-modal-footer">
-            <button type="button" class="button" id="pw-modal-cancel">
-                <span class="dashicons dashicons-no"></span>
-                <?php _e('Annuler', 'postal-warmup'); ?>
-            </button>
-            <button type="button" class="button button-primary" id="pw-modal-confirm">
-                <span class="dashicons dashicons-yes"></span>
-                <?php _e('Confirmer le changement', 'postal-warmup'); ?>
-            </button>
+
+                <div class="pw-form-group">
+                    <label>API Key</label>
+                    <input type="password" name="api_key" value="" class="large-text" <?php echo ($id > 0) ? '' : 'required'; ?>>
+                    <?php if($id > 0): ?><p class="description">Laissez vide pour ne pas changer.</p><?php endif; ?>
+                </div>
+
+                <div class="pw-form-group">
+                    <label>Quota Journalier (Global)</label>
+                    <input type="number" name="daily_limit" value="<?php echo esc_attr($server['daily_limit'] ?? 0); ?>" class="small-text">
+                    <p class="description">0 = Illimité. Ce quota s'applique au serveur entier.</p>
+                </div>
+
+                <div class="pw-form-group">
+                    <label>Priorité</label>
+                    <input type="number" name="priority" value="<?php echo esc_attr($server['priority'] ?? 10); ?>" class="small-text">
+                    <p class="description">Plus le chiffre est haut, plus le serveur est prioritaire.</p>
+                </div>
+
+                <div class="pw-form-group">
+                    <label>
+                        <input type="checkbox" name="active" value="1" <?php checked($server['active'] ?? 1, 1); ?>>
+                        Actif
+                    </label>
+                </div>
+
+                <div class="pw-actions">
+                    <button type="submit" class="button button-primary">Enregistrer</button>
+                    <a href="?page=postal-warmup-servers" class="button">Annuler</a>
+
+                    <?php if($id > 0): ?>
+                    <button type="button" class="button button-secondary" id="pw-test-connection" data-id="<?php echo $id; ?>" style="float:right;">
+                        Tester la connexion
+                    </button>
+                    <?php endif; ?>
+                </div>
+            </form>
         </div>
     </div>
 </div>
+
+<script>
+jQuery('#pw-test-connection').on('click', function() {
+    var $btn = jQuery(this);
+    var id = $btn.data('id');
+    $btn.prop('disabled', true).text('Test en cours...');
+
+    jQuery.post(ajaxurl, {
+        action: 'pw_test_server',
+        server_id: id,
+        nonce: '<?php echo wp_create_nonce("pw_admin_nonce"); ?>'
+    }, function(res) {
+        $btn.prop('disabled', false).text('Tester la connexion');
+        alert(res.data.message);
+    });
+});
+</script>
+
+<?php else:
+// LIST VIEW
+$servers = Database::get_servers(); // Get all (even inactive)?
+// Database::get_servers defaults to limit 500. We might want pagination later.
+?>
+<div class="wrap pw-dashboard">
+    <div class="pw-header">
+        <h1>
+            <span class="dashicons dashicons-networking"></span>
+            <?php _e('Gestion des Serveurs', 'postal-warmup'); ?>
+        </h1>
+        <a href="?page=postal-warmup-servers&action=add" class="pw-btn pw-btn-primary">
+            <span class="dashicons dashicons-plus"></span> Ajouter
+        </a>
+    </div>
+
+    <div class="pw-card">
+        <div class="pw-card-body" style="padding: 0;">
+            <table class="pw-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Domaine</th>
+                        <th>API URL</th>
+                        <th>Status</th>
+                        <th>Utilisation</th>
+                        <th>Succès</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($servers as $server): ?>
+                    <tr>
+                        <td>#<?php echo $server['id']; ?></td>
+                        <td><strong><?php echo esc_html($server['domain']); ?></strong></td>
+                        <td><?php echo esc_html($server['api_url']); ?></td>
+                        <td>
+                            <?php if ($server['active']): ?>
+                                <span class="pw-badge pw-badge-success">Actif</span>
+                            <?php else: ?>
+                                <span class="pw-badge pw-badge-danger">Inactif</span>
+                            <?php endif; ?>
+                        </td>
+                        <td><?php echo number_format_i18n($server['sent_count']); ?></td>
+                        <td><?php echo number_format_i18n($server['success_count']); ?></td>
+                        <td>
+                            <div class="pw-cell-actions">
+                                <a href="?page=postal-warmup-servers&action=edit&id=<?php echo $server['id']; ?>" class="pw-btn pw-btn-secondary pw-btn-sm">
+                                    <span class="dashicons dashicons-edit"></span>
+                                </a>
+                                <a href="<?php echo wp_nonce_url('?page=postal-warmup-servers&action=delete&id=' . $server['id'], 'pw_delete_server_' . $server['id']); ?>"
+                                   class="pw-btn pw-btn-danger pw-btn-sm"
+                                   onclick="return confirm('Supprimer ce serveur ?');">
+                                    <span class="dashicons dashicons-trash"></span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if(empty($servers)): ?>
+                    <tr><td colspan="7" style="text-align:center;">Aucun serveur trouvé.</td></tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>

@@ -3,6 +3,9 @@
  * Tests pour la gestion des templates
  */
 
+use PostalWarmup\Core\Activator;
+use PostalWarmup\Services\TemplateLoader;
+
 class Test_Template_Management extends WP_UnitTestCase {
 
     public function setUp(): void {
@@ -10,14 +13,13 @@ class Test_Template_Management extends WP_UnitTestCase {
         update_option('pw_feature_flags', ['db_templates' => true, 'modern_ui' => true]);
         
         // S'assurer que les tables existent
-        require_once PW_INCLUDES_DIR . 'class-pw-activator.php';
-        PW_Activator::activate();
+        Activator::activate();
     }
 
     public function test_save_template_to_db() {
         $name = 'test_template';
         $data = ['subject' => ['Test Subject'], 'text' => ['Test Text'], 'html' => ['<p>Test HTML</p>'], 'from_name' => ['Test From']];
-        $result = PW_Template_Loader::save_template($name, $data);
+        $result = TemplateLoader::save_template($name, $data);
         $this->assertTrue($result);
         
         global $wpdb;
@@ -35,8 +37,8 @@ class Test_Template_Management extends WP_UnitTestCase {
         $data1 = ['subject' => ['v1'], 'text' => ['v1'], 'html' => ['v1'], 'from_name' => ['v1']];
         $data2 = ['subject' => ['v2'], 'text' => ['v2'], 'html' => ['v2'], 'from_name' => ['v2']];
         
-        PW_Template_Loader::save_template($name, $data1);
-        PW_Template_Loader::save_template($name, $data2);
+        TemplateLoader::save_template($name, $data1);
+        TemplateLoader::save_template($name, $data2);
         
         global $wpdb;
         $table_tpl = $wpdb->prefix . 'postal_templates';

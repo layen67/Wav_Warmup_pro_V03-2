@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PostalWarmup\Models;
 
 /**
@@ -10,11 +12,13 @@ class Strategy {
     /**
      * Récupère toutes les stratégies
      */
-    public static function get_all() {
+    public static function get_all(): array {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_strategies';
         $results = $wpdb->get_results( "SELECT * FROM $table ORDER BY name ASC", ARRAY_A );
         
+        if ( ! is_array( $results ) ) return [];
+
         foreach ( $results as &$row ) {
             $row['config'] = json_decode( $row['config_json'], true ) ?: [];
         }
@@ -24,7 +28,7 @@ class Strategy {
     /**
      * Récupère une stratégie par ID
      */
-    public static function get( $id ) {
+    public static function get( int $id ): ?array {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_strategies';
         $row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $id ), ARRAY_A );
@@ -32,13 +36,13 @@ class Strategy {
         if ( $row ) {
             $row['config'] = json_decode( $row['config_json'], true ) ?: [];
         }
-        return $row;
+        return $row ?: null;
     }
 
     /**
      * Enregistre une stratégie
      */
-    public static function save( $data ) {
+    public static function save( array $data ): int {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_strategies';
         
@@ -62,7 +66,7 @@ class Strategy {
     /**
      * Supprime une stratégie
      */
-    public static function delete( $id ) {
+    public static function delete( int $id ): bool {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_strategies';
         
@@ -73,6 +77,6 @@ class Strategy {
             [ 'strategy_id' => $id ] 
         );
         
-        return $wpdb->delete( $table, [ 'id' => $id ] );
+        return (bool) $wpdb->delete( $table, [ 'id' => $id ] );
     }
 }

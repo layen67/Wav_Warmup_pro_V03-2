@@ -1,6 +1,7 @@
 {
     "name": "elianova/postal-warmup-pro",
     "description": "Plugin professionnel de warmup multi-serveurs Postal",
+    "version": "3.4.0",
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "authors": [

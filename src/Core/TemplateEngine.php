@@ -1,9 +1,11 @@
 <?php
+// src/Core/TemplateEngine.php
+
+declare(strict_types=1);
 
 namespace PostalWarmup\Core;
 
 use PostalWarmup\Services\TemplateLoader;
-use PostalWarmup\Models\Database;
 
 /**
  * Centralized Template Engine
@@ -18,9 +20,9 @@ class TemplateEngine {
 	 * @param string $domain
 	 * @param string $prefix
 	 * @param string $to
-	 * @return array|WP_Error
+	 * @return array
 	 */
-	public static function prepare_template( $template_name, $domain, $prefix, $to ) {
+	public static function prepare_template( string $template_name, string $domain, string $prefix, string $to ): array {
 		// 1. Load Template
 		$template = TemplateLoader::load( $template_name, $domain );
 		
@@ -34,11 +36,11 @@ class TemplateEngine {
 			$template['name'] = 'system-fallback'; 
 		}
 
-		// 3. Pick Variants (Random Selection)
-		$subject   = self::pick_random( $template['subject'] );
-		$text      = self::pick_random( $template['text'] );
-		$html      = self::pick_random( $template['html'] );
-		$from_name = self::pick_random( $template['from_name'] );
+		// 3. Pick Variants (Random Selection) - Delegated to TemplateLoader
+		$subject   = self::pick_random( $template['subject'] ?? [] );
+		$text      = self::pick_random( $template['text'] ?? [] );
+		$html      = self::pick_random( $template['html'] ?? [] );
+		$from_name = self::pick_random( $template['from_name'] ?? [] );
 		
 		// 4. Decode Content (Base64 check)
 		$subject   = self::maybe_decode( $subject );
@@ -48,17 +50,31 @@ class TemplateEngine {
 
 		// 5. Prepare Variables
 		$vars = [
-			'email'  => $to,
-			'domain' => $domain,
-			'local'  => $prefix,
-			'date'   => current_time( 'd/m/Y' ),
-			'time'   => current_time( 'H:i' ),
+			'email'        => $to,
+			'domain'       => $domain,
+			'local'        => $prefix,
+			'date'         => current_time( 'd/m/Y' ),
+			'time'         => current_time( 'H:i' ),
+			// Natural Variables
+			'prenom'       => mb_convert_case( explode( '.', $prefix )[0], MB_CASE_TITLE, 'UTF-8' ),
+			'prénom'       => mb_convert_case( explode( '.', $prefix )[0], MB_CASE_TITLE, 'UTF-8' ),
+			'heure_fr'     => current_time( 'H\hi' ),
+			'jour_semaine' => date_i18n( 'l' ),
+			'mois'         => date_i18n( 'F' ),
+			'civilite'     => ( (int) current_time( 'H' ) >= 18 || (int) current_time( 'H' ) < 5 ) ? 'Bonsoir' : 'Bonjour',
+			'ref'          => 'REF-' . strtoupper( substr( md5( uniqid() ), 0, 8 ) ),
+			'site_url'     => get_site_url(),
+			'site_name'    => get_bloginfo( 'name' ),
+			'admin_email'  => get_option( 'admin_email' ),
+			'user_ip'      => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
+			'user_agent'   => $_SERVER['HTTP_USER_AGENT'] ?? 'Mozilla/5.0',
 		];
 
 		// 6. Apply Placeholders
-		$subject = self::apply_placeholders( $subject, $vars );
-		$text    = self::apply_placeholders( $text, $vars );
-		$html    = self::apply_placeholders( $html, $vars );
+		$subject   = self::render_string( $subject, $vars );
+		$text      = self::render_string( $text, $vars );
+		$html      = self::render_string( $html, $vars );
+		$from_name = self::render_string( $from_name, $vars );
 
 		// 7. Handle Reply-To
 		$reply_to = '';
@@ -66,7 +82,7 @@ class TemplateEngine {
 			$reply_to_raw = self::pick_random( $template['reply_to'] );
 			$reply_to_raw = self::maybe_decode( $reply_to_raw );
 			if ( ! empty( $reply_to_raw ) ) {
-				$reply_to = self::apply_placeholders( $reply_to_raw, $vars );
+				$reply_to = self::render_string( $reply_to_raw, $vars );
 			}
 		}
 
@@ -105,15 +121,47 @@ class TemplateEngine {
 		return $string;
 	}
 
-	public static function pick_random( $array ) {
+	public static function pick_random( $array ): string {
 		if ( ! is_array( $array ) || empty( $array ) ) return '';
-		return $array[ array_rand( $array ) ];
+		return TemplateLoader::pick_random( $array );
+	}
+
+	/**
+	 * Render a string with variables and spintax processing.
+	 *
+	 * @param string $text The content to render.
+	 * @param array $context The variables to replace (e.g. ['prenom' => 'Jean']).
+	 * @return string Rendered content.
+	 */
+	public static function render_string( $text, $context = [] ) {
+		if ( ! is_string( $text ) || empty( $text ) ) return $text;
+
+		// 1. Process Spintax first
+		$text = self::process_spintax( $text );
+
+		// 2. Apply Placeholders
+		$text = self::apply_placeholders( $text, $context );
+
+		return $text;
 	}
 
 	public static function apply_placeholders( $text, $vars ) {
 		foreach ( $vars as $key => $value ) {
-			$text = str_replace( "{{{$key}}}", $value, $text );
+			$text = str_replace( "{{{$key}}}", (string)$value, $text );
 		}
+		return $text;
+	}
+
+	public static function process_spintax( $text ) {
+		if ( ! is_string( $text ) || empty( $text ) ) return $text;
+
+		while ( preg_match( '/\{([^{}]*\|[^{}]*)\}/', $text ) ) {
+			$text = preg_replace_callback( '/\{([^{}]*\|[^{}]*)\}/', function( $matches ) {
+				$options = explode( '|', $matches[1] );
+				return $options[ array_rand( $options ) ];
+			}, $text );
+		}
+
 		return $text;
 	}
 }
